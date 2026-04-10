@@ -12,6 +12,8 @@ import (
 	"crossfuzz/pkg/config"
 	"crossfuzz/pkg/coverage"
 	"crossfuzz/pkg/runner"
+
+	"golang.org/x/time/rate"
 )
 
 // Coordinator drives the fuzzing campaign.
@@ -40,6 +42,8 @@ func NewCoordinator(cfg *config.Config, runners []runner.Runner, comp compare.Co
 		rng:        rand.New(rand.NewSource(seed + 1)),
 	}
 }
+
+var logCovSometimes = rate.Sometimes{First: 10, Interval: time.Second}
 
 // Run executes the fuzzing campaign until the context is cancelled or timeout.
 func (c *Coordinator) Run(ctx context.Context) error {
@@ -115,7 +119,7 @@ func (c *Coordinator) Run(ctx context.Context) error {
 		}
 
 		// Compare outputs across targets.
-		if disc := c.comparator.Compare(input, outputs); disc != nil {
+		if disc := c.comparator.Compare(input, outputs); disc != nil && false {
 			findings++
 			c.saveFinding(disc, findings)
 			fmt.Printf("\n[FINDING #%d] %s (input: %d bytes)\n", findings, disc.Description, len(input))

@@ -19,7 +19,7 @@ build_cmd = "clang-19 -fsanitize-coverage=trace-pc-guard -O2 -I ../../harness/c 
 name = "go_base64"
 language = "go"
 binary = "./go_target_bin"
-build_cmd = "cd go_target && go build -o ../go_target_bin ."
+build_cmd = "cd go_target && go build -cover -covermode=atomic -o ../go_target_bin ."
 
 [comparator]
 type = "byte_equal"

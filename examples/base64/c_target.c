@@ -28,8 +28,8 @@ int crossfuzz_target(const uint8_t *data, size_t size,
     size_t mod = size % 3;
     if (mod > 0) {
         out[out_len - 1] = '=';
-        //if (mod == 1)
-        //    out[out_len - 2] = '=';
+        if (mod == 1)
+            out[out_len - 2] = '=';
     }
 
     return 0;

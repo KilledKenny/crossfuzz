@@ -19,7 +19,7 @@ type Stats struct {
 
 // NewStats creates a stats tracker.
 func NewStats() *Stats {
-	now := time.Now()
+	now := time.Now().Add(-time.Duration(time.Second * 5))
 	return &Stats{startTime: now, lastPrint: now}
 }
 
@@ -49,7 +49,7 @@ func (s *Stats) PrintIfDue() {
 	elapsed := time.Since(s.startTime)
 	execsPerSec := float64(s.totalExecs) / elapsed.Seconds()
 
-	fmt.Printf("\r\033[2K[%s] execs: %d (%.0f/sec) | corpus: %d | coverage: %d edges | findings: %d",
+	fmt.Printf("\r\033[2K[%s] execs: %d (%.0f/sec) | corpus: %d | coverage: %d edges | findings: %d\n",
 		elapsed.Truncate(time.Second), s.totalExecs, execsPerSec,
 		s.corpusSize, s.coverBits, s.findings)
 
