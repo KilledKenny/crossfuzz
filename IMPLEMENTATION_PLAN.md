@@ -2,7 +2,7 @@
 
 ## Summary
 
-Five phases, from a working MVP with 2 targets and random mutation to a production-hardened tool supporting all 5 languages with coverage-guided differential fuzzing.
+Seven phases, from a working MVP with 2 targets and random mutation to a production-hardened tool supporting all 5 languages with coverage-guided differential fuzzing.
 
 ---
 
@@ -95,9 +95,9 @@ loop:
 
 ---
 
-## Phase 3: Full Language Support
+## Phase 3: Java Harness
 
-**Goal:** Add Java, JavaScript, and C++ harnesses. All 5 languages fully operational.
+**Goal:** Add Java harness with coverage via `java.lang.instrument`. Java targets fully operational alongside C and Go.
 
 ### Deliverables
 
@@ -105,30 +105,69 @@ loop:
 |---|------|-------------|
 | 1 | `harness/java/src/crossfuzz/Harness.java` | Java harness: persistent loop, pipe protocol via `/proc/self/fd/N`, shared memory via `FileChannel.map()` |
 | 2 | `harness/java/src/crossfuzz/Target.java` | `Target` interface: `byte[] fuzz(byte[] input)` |
-| 3 | Java coverage integration | JaCoCo agent in `premain` mode; custom `IExecutionDataVisitor` copies probe data to shared memory bitmap after each execution |
-| 4 | `harness/js/crossfuzz.js` | JS harness: persistent loop, pipe protocol via `fs.createReadStream/WriteStream(fd)`, shared memory via native N-API addon or file I/O fallback |
-| 5 | JS coverage integration | Istanbul-based instrumentation of target source; `__coverage__` counters copied to bitmap after each execution |
-| 6 | `harness/cpp/crossfuzz.hpp` | C++ harness: thin wrapper over C harness with `std::function`, `std::span`, RAII |
-| 7 | `pkg/runner/pool.go` | Process pool: run multiple instances of the same target for intra-language parallelism |
-| 8 | `examples/json_parse/` | JSON parser differential fuzz across all 5 languages |
+| 3 | `harness/java/src/crossfuzz/CoverageAgent.java` | `premain` agent using `java.lang.instrument.Instrumentation`; registers a `ClassFileTransformer` that injects coverage callbacks at basic block entries |
+| 4 | `harness/java/src/crossfuzz/CoverageTransformer.java` | ASM-based bytecode transformer: assigns each basic block a stable hash-derived bitmap index, injects `CoverageRuntime.hit(index)` calls |
+| 5 | `harness/java/src/crossfuzz/CoverageRuntime.java` | `hit(int index)`: writes a 1 to the shared memory bitmap at the given index (mapped via `FileChannel.map()` over the inherited shm FD) |
+| 6 | `harness/java/META-INF/MANIFEST.MF` | Declares `Premain-Class`, `Can-Retransform-Classes: true` |
+| 7 | `examples/json_parse/JavaTarget.java` | JSON parser target implemented in Java |
 
-### Language-specific challenges
+### Language-specific notes
 
-**Java:**
-- JVM startup is slow (~200ms) -- persistent mode is critical
-- Shared memory: `FileChannel.map()` on `/proc/self/fd/N` works on Linux. For portability, consider passing the shm file path via environment variable.
-- Coverage: JaCoCo's `Instrumenter` + `ExecutionDataStore` provide per-probe boolean arrays. Map probe IDs to bitmap indices via hash.
+- JVM startup is slow (~200ms) -- persistent mode is critical; the harness loop must stay resident between executions.
+- Shared memory: `FileChannel.map()` on `/proc/self/fd/N` works on Linux. The shm file path is also passed via `CROSSFUZZ_SHM_PATH` for portability.
+- Coverage: `java.lang.instrument` gives access to raw bytecode at class-load time. The ASM library transforms each class to inject `CoverageRuntime.hit(index)` at every basic block. Map block identities to bitmap indices via `(className + blockId).hashCode() & 0xFFFF`.
+- The agent JAR is passed with `-javaagent:crossfuzz-agent.jar` in the target's `launch_cmd`.
 
-**JavaScript:**
-- Node.js cannot natively `mmap` -- options:
-  - **Native addon** (N-API): `mmap()` wrapper, ~50 lines of C. Best performance.
-  - **File I/O fallback**: `fs.readFileSync`/`fs.writeFileSync` on the shm file. Simple but slower (~10x).
-  - Start with file I/O, upgrade to native addon.
-- Coverage: Instrument target source with Istanbul at load time. The `istanbul-lib-instrument` package provides an API for this.
+### Definition of done
+- Java target runs persistently and responds to pipe protocol messages
+- Coverage bitmap fills as code paths are exercised
+- `examples/json_parse/` runs with C, Go, and Java simultaneously
 
-**C++:**
-- Trivial: wrap the C harness. Provide `crossfuzz::run(std::function<std::vector<uint8_t>(std::span<const uint8_t>)>)`.
-- Same SanitizerCoverage mechanism as C.
+---
+
+## Phase 4: C++ Harness
+
+**Goal:** Add C++ harness. Thin wrapper over the C harness -- straightforward since it shares the same SanitizerCoverage mechanism.
+
+### Deliverables
+
+| # | File | Description |
+|---|------|-------------|
+| 1 | `harness/cpp/crossfuzz.hpp` | C++ harness: RAII wrapper over C harness with `std::function<std::vector<uint8_t>(std::span<const uint8_t>)>` entry point |
+| 2 | `examples/json_parse/CppTarget.cpp` | JSON parser target implemented in C++ |
+
+### Language-specific notes
+
+- Trivial: `crossfuzz.hpp` `#include`s `crossfuzz.h` and wraps the C entry point with a type-safe C++ lambda interface.
+- Same `-fsanitize-coverage=trace-pc-guard` compilation flags as C targets; no new coverage infrastructure needed.
+- Provide `crossfuzz::run(std::function<...>)` that internally calls the C `crossfuzz_run` with a trampoline.
+
+### Definition of done
+- C++ target compiles with `clang++ -fsanitize-coverage=trace-pc-guard` and runs via the existing runner
+- `examples/json_parse/` runs with C, Go, Java, and C++ simultaneously
+
+---
+
+## Phase 5: JavaScript Harness
+
+**Goal:** Add JavaScript harness using Bun. Bun's native `mmap` support simplifies shared memory; Istanbul provides coverage instrumentation.
+
+### Deliverables
+
+| # | File | Description |
+|---|------|-------------|
+| 1 | `harness/js/crossfuzz.ts` | Bun harness: persistent loop, pipe protocol via `Bun.file(fd)` streams, shared memory via `Bun.mmap()` over the inherited shm FD |
+| 2 | `harness/js/instrument.ts` | Load-time Istanbul instrumentation: wraps `require`/`import` to instrument target source; copies `__coverage__` counters into the bitmap after each execution |
+| 3 | `examples/json_parse/target.ts` | JSON parser target implemented in TypeScript/Bun |
+| 4 | `pkg/runner/pool.go` | Process pool: run multiple instances of the same target for intra-language parallelism |
+| 5 | `examples/json_parse/` | Complete JSON parser differential fuzz example across all 5 languages |
+
+### Language-specific notes
+
+- Bun exposes `Bun.mmap(fd, size)` natively -- no native addon or file-I/O fallback needed. Map the inherited shm FD directly.
+- Pipe I/O: use `Bun.stdin`/`Bun.stdout` or `new ReadableStream` over the inherited pipe FDs.
+- Coverage: instrument target source with `istanbul-lib-instrument` at load time. After each execution, iterate `__coverage__[file][statementMap]` counters and OR them into the bitmap.
+- Bun startup is fast (<5ms) but persistent mode is still preferred to amortize instrumentation overhead.
 
 ### Definition of done
 - `examples/json_parse/` runs with all 5 languages simultaneously
@@ -137,7 +176,7 @@ loop:
 
 ---
 
-## Phase 4: Advanced Comparators and Minimization
+## Phase 6: Advanced Comparators and Minimization
 
 **Goal:** Rich comparison framework, input minimization, structured findings.
 
@@ -180,7 +219,7 @@ minimize(input, targets, comparator):
 
 ---
 
-## Phase 5: Production Hardening
+## Phase 7: Production Hardening
 
 **Goal:** Robustness, performance, usability for real-world campaigns.
 
@@ -231,8 +270,8 @@ Each worker has its own set of target processes. Workers share the corpus and gl
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
-| Java shared memory complexity | Medium | High | Use `/proc/self/fd/N` with `FileChannel.map()` on Linux; document Linux-only for Java targets initially |
-| JS mmap native addon maintenance | Medium | Medium | Ship with file-I/O fallback that works everywhere; native addon is optional optimization |
+| Java instrumentation overhead | Medium | Medium | `java.lang.instrument` transforms happen at class-load time; amortized cost per execution is small. Benchmark and limit instrumentation to application classes only (exclude JDK internals). |
+| JS Bun mmap API stability | Low | Medium | `Bun.mmap` is a stable Bun API; pin the Bun version in CI to avoid surprises |
 | Go coverage counter access changes between Go versions | Low | Medium | Use `go build -cover` (stable API since Go 1.20); avoid `//go:linkname` hacks |
 | Coverage granularity mismatch across languages | High | Low | Accept approximate coverage unification; the goal is to find discrepancies, not measure exact coverage. Even coarse coverage from one language helps guide mutation. |
 | Target process instability under fuzzing | High | Medium | Robust restart with state recovery; save last N inputs for reproduction |
@@ -254,6 +293,8 @@ This proves the core value proposition: **"same input, multiple languages, spot 
 
 From there, each phase adds a meaningful capability:
 - Phase 2 adds intelligence (coverage-guided mutation)
-- Phase 3 adds breadth (all 5 languages)
-- Phase 4 adds precision (better comparison, minimization)
-- Phase 5 adds reliability (production-grade robustness)
+- Phase 3 adds Java (instrument-based coverage, persistent JVM)
+- Phase 4 adds C++ (trivial wrap over C harness)
+- Phase 5 adds JavaScript (Bun with native mmap, Istanbul coverage)
+- Phase 6 adds precision (better comparison, minimization)
+- Phase 7 adds reliability (production-grade robustness)
