@@ -19,7 +19,7 @@ build_cmd = "clang-19 -fsanitize-coverage=trace-pc-guard -O2 -I ../../harness/c 
 name = "go_base64"
 language = "go"
 binary = "./go_target_bin"
-build_cmd = "cd go_target && go build -cover -covermode=atomic -coverpkg=all -o ../go_target_bin ."
+build_cmd = "cd go_target && PKGS=$(go list -deps . | grep -vE '^(runtime$|runtime/.*|sync$|sync/.*|internal/.*|reflect$|syscall$|os$|os/.*)' | paste -sd,) && go build -cover -covermode=atomic -coverpkg=\"$PKGS\" -o ../go_target_bin ."
 
 [comparator]
 type = "byte_equal"
