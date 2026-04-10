@@ -1,0 +1,32 @@
+[campaign]
+name = "json_parse_diff"
+timeout = "30m"
+exec_timeout = "1000ms"
+max_input_size = 4096
+
+[corpus]
+seed_dir = "./seeds"
+cache_dir = "./cache"
+findings_dir = "./findings"
+
+#[[target]]
+#name = "c_json"
+#language = "c"
+#binary = "./c_target"
+#build_cmd = "clang-19 -fsanitize-coverage=trace-pc-guard -O2 -I ../../harness/c -o c_target c_target.c ../../harness/c/crossfuzz.c"
+#
+#[[target]]
+#name = "go_json"
+#language = "go"
+#binary = "./go_target_bin"
+#build_cmd = "cd go_target && PKGS=$(go list -deps . | grep -vE '^(runtime$|runtime/.*|sync$|sync/.*|internal/.*|reflect$|syscall$|os$|os/.*)' | paste -sd,) && go build -cover -covermode=atomic -coverpkg=\"$PKGS\" -o ../go_target_bin ."
+
+[[target]]
+name = "java_json"
+language = "java"
+binary = "java"
+args = ["-javaagent:../../harness/java/build/libs/crossfuzz.jar", "-cp", "../../harness/java/build/libs/crossfuzz.jar:.", "JavaTarget"]
+build_cmd = "cd ../../harness/java && gradle jar && cd - && javac -cp ../../harness/java/build/libs/crossfuzz.jar JavaTarget.java"
+
+[comparator]
+type = "byte_equal"

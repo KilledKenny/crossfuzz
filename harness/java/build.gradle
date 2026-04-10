@@ -1,0 +1,35 @@
+plugins {
+    id 'java'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.ow2.asm:asm:9.7.1'
+    implementation 'org.ow2.asm:asm-tree:9.7.1'
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src']
+        }
+    }
+}
+
+jar {
+    manifest {
+        attributes(
+            'Premain-Class': 'crossfuzz.CoverageAgent',
+            'Can-Retransform-Classes': 'true',
+            'Main-Class': 'crossfuzz.Harness'
+        )
+    }
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    archiveFileName = 'crossfuzz.jar'
+}
