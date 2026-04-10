@@ -2,3 +2,4 @@ findings
 cache
 c_target
 go_target_bin
+cpp_target
