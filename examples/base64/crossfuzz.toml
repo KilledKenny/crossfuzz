@@ -1,0 +1,25 @@
+[campaign]
+name = "base64_diff"
+timeout = "2m"
+exec_timeout = "500ms"
+max_input_size = 1024
+
+[corpus]
+seed_dir = "./seeds"
+cache_dir = "./cache"
+findings_dir = "./findings"
+
+[[target]]
+name = "c_base64"
+language = "c"
+binary = "./c_target"
+build_cmd = "clang-19 -fsanitize-coverage=trace-pc-guard -O2 -I ../../harness/c -o c_target c_target.c ../../harness/c/crossfuzz.c"
+
+[[target]]
+name = "go_base64"
+language = "go"
+binary = "./go_target_bin"
+build_cmd = "cd go_target && go build -o ../go_target_bin ."
+
+[comparator]
+type = "byte_equal"
