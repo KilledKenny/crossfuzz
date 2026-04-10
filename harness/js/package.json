@@ -1,0 +1,16 @@
+{
+  "name": "crossfuzz-js-harness",
+  "version": "1.0.0",
+  "module": "crossfuzz.ts",
+  "type": "module",
+  "dependencies": {
+    "istanbul-lib-instrument": "^6.0.3"
+  },
+  "devDependencies": {
+    "@types/istanbul-lib-instrument": "^1.7.8",
+    "bun-types": "latest"
+  },
+  "peerDependencies": {
+    "bun": ">=1.0.0"
+  }
+}
