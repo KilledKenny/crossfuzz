@@ -76,7 +76,27 @@ func Run(target TargetFunc) {
 
 		case protocol.TypeFuzz:
 			input := shm.ReadInput()
+
+			// Tighten the counter window: clear counters *immediately*
+			// before calling target so that protocol/IO code executed
+			// between iterations is not attributed to this input. On
+			// the first real Fuzz call we also build the noise mask
+			// (see covCollector.warmup).
+			if collector.enabled {
+				if !collector.warmedUp {
+					collector.warmup(target, input)
+				}
+				_ = rtcov.ClearCounters()
+			}
+
 			output, targetErr := target(input)
+
+			if collector.enabled {
+				if err := collector.snapshot(); err != nil {
+					collector.enabled = false
+					fmt.Fprintf(os.Stderr, "crossfuzz: coverage disabled: %v\n", err)
+				}
+			}
 
 			if output != nil {
 				shm.WriteOutput(output)
@@ -93,16 +113,6 @@ func Run(target TargetFunc) {
 				shm.SetStatus(coverage.StatusOK)
 			}
 
-			if collector.enabled {
-				if err := collector.snapshot(); err != nil {
-					// Coverage is best-effort: a parse/clear failure
-					// must not abort the campaign. Log once and keep
-					// going with coverage disabled.
-					collector.enabled = false
-					fmt.Fprintf(os.Stderr, "crossfuzz: coverage disabled: %v\n", err)
-				}
-			}
-
 			if err := protocol.Encode(respW, resp); err != nil {
 				return
 			}
@@ -115,11 +125,19 @@ func Run(target TargetFunc) {
 // bitmap before every iteration (see pkg/runner/process.go), so snapshot
 // starts each call from a clean slate and only needs to OR in the new
 // data.
+//
+// noiseMask holds slots that have proven flaky during startup warmup:
+// runtime/GC/allocator paths whose counters vary between identical
+// target invocations. Any bit set in noiseMask is cleared from every
+// snapshot so those paths never cause a bogus "new coverage" event on
+// the coordinator.
 type covCollector struct {
-	buf     bytes.Buffer
-	reader  covReader
-	enabled bool
-	bitmap  []byte
+	buf       bytes.Buffer
+	reader    covReader
+	enabled   bool
+	bitmap    []byte
+	noiseMask [65536]byte
+	warmedUp  bool
 }
 
 // init probes runtime/coverage to decide whether this binary was built
@@ -143,11 +161,28 @@ func (c *covCollector) init(bitmap []byte) {
 }
 
 // snapshot captures the current counter state, hashes every
-// (pkgID, funcID, counterIdx) tuple into a 16-bit bitmap slot, stores
-// a saturating 8-bit counter value (taking the max across collisions),
-// then clears counters for the next iteration. Bucketization into
-// powers of two happens later in the coordinator (coverage.Bucketize).
+// (pkgID, funcID, counterIdx) tuple into a 16-bit bitmap slot and
+// stores a saturating 8-bit counter value (taking the max across
+// collisions). Counters are NOT cleared here — clearing happens right
+// before the next target() call so that protocol/IO code executed
+// between iterations is not attributed to the target. Bucketization
+// into powers of two happens later in the coordinator
+// (coverage.Bucketize).
 func (c *covCollector) snapshot() error {
+	if err := c.fill(c.bitmap); err != nil {
+		return err
+	}
+	for i, m := range c.noiseMask {
+		if m != 0 {
+			c.bitmap[i] = 0
+		}
+	}
+	return nil
+}
+
+// fill parses one WriteCounters stream into the given bitmap buffer.
+// Assumes buf is already zeroed by the caller.
+func (c *covCollector) fill(bitmap []byte) error {
 	c.buf.Reset()
 	if err := rtcov.WriteCounters(&c.buf); err != nil {
 		return fmt.Errorf("WriteCounters: %w", err)
@@ -156,11 +191,6 @@ func (c *covCollector) snapshot() error {
 	if err != nil {
 		return fmt.Errorf("parse covcounters: %w", err)
 	}
-
-	// BitmapSize is 65536 (a power of 2), so a uint16 index naturally
-	// wraps into range. If BitmapSize ever changes this needs an explicit
-	// modulo.
-	bitmap := c.bitmap
 	for _, f := range funcs {
 		pkg := uint64(f.pkgID)
 		fn := uint64(f.funcID)
@@ -179,9 +209,70 @@ func (c *covCollector) snapshot() error {
 			}
 		}
 	}
-
-	if err := rtcov.ClearCounters(); err != nil {
-		return fmt.Errorf("ClearCounters: %w", err)
-	}
 	return nil
+}
+
+// warmup runs target repeatedly on a sample input to discover which
+// bitmap slots are non-deterministic across identical invocations
+// (typically GC/allocator/scheduler paths instrumented by
+// -coverpkg=all). Those slots get masked from every subsequent
+// snapshot so they cannot produce spurious "new coverage" events.
+//
+// A panic inside target during warmup is recovered and coverage is
+// simply kept unmasked — the campaign will be noisier but still
+// functional.
+func (c *covCollector) warmup(target TargetFunc, sample []byte) {
+	const iterations = 200
+	c.warmedUp = true
+
+	var first [65536]byte
+	var scratch [65536]byte
+
+	safeRun := func() (ok bool) {
+		defer func() {
+			if r := recover(); r != nil {
+				ok = false
+			}
+		}()
+		_ = rtcov.ClearCounters()
+		_, _ = target(sample)
+		return true
+	}
+
+	if !safeRun() {
+		fmt.Fprintln(os.Stderr,
+			"crossfuzz: coverage warmup skipped (target panicked on sample input)")
+		return
+	}
+	if err := c.fill(first[:]); err != nil {
+		fmt.Fprintf(os.Stderr, "crossfuzz: coverage warmup snapshot: %v\n", err)
+		return
+	}
+
+	for k := 1; k < iterations; k++ {
+		if !safeRun() {
+			break
+		}
+		for i := range scratch {
+			scratch[i] = 0
+		}
+		if err := c.fill(scratch[:]); err != nil {
+			return
+		}
+		for i := range scratch {
+			if scratch[i] != first[i] {
+				c.noiseMask[i] = 0xFF
+			}
+		}
+	}
+
+	noisy := 0
+	for _, v := range c.noiseMask {
+		if v != 0 {
+			noisy++
+		}
+	}
+	fmt.Fprintf(os.Stderr,
+		"crossfuzz: coverage warmup masked %d/%d flaky slots\n",
+		noisy, len(c.noiseMask))
 }

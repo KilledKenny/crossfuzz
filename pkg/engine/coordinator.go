@@ -88,20 +88,7 @@ func (c *Coordinator) Run(ctx context.Context) error {
 		}
 
 		// Execute on all targets.
-		outputs := make(map[string][]byte, len(c.runners))
-		combinedCov := make([]byte, coverage.BitmapSize)
-		var execErr error
-
-		for _, r := range c.runners {
-			output, cov, err := r.Execute(input)
-			if err != nil {
-				execErr = fmt.Errorf("target %s: %w", r.Name(), err)
-				break
-			}
-			outputs[r.Name()] = output
-			coverage.Merge(combinedCov, cov)
-		}
-
+		outputs, combinedCov, execErr := c.executeAll(input)
 		if execErr != nil {
 			fmt.Printf("\nExec error: %v\n", execErr)
 			continue
@@ -109,12 +96,25 @@ func (c *Coordinator) Run(ctx context.Context) error {
 
 		c.stats.RecordExec()
 
-		// Check for new coverage.
+		// Check for new coverage. Re-run once to filter out flaky
+		// edges — Go's runtime/coverage instrumentation still emits a
+		// small amount of noise on GC/scheduler paths even after the
+		// harness-side noise mask, so we accept only bits that show up
+		// in BOTH runs before claiming new coverage.
 		coverage.Bucketize(combinedCov)
 		if coverage.HasNewBits(c.globalCov, combinedCov) {
-			coverage.Merge(c.globalCov, combinedCov)
-			if c.corpus.Add(input) {
-				c.corpus.Save(input)
+			_, verifyCov, verifyErr := c.executeAll(input)
+			if verifyErr == nil {
+				coverage.Bucketize(verifyCov)
+				for i := range combinedCov {
+					combinedCov[i] &= verifyCov[i]
+				}
+				if coverage.HasNewBits(c.globalCov, combinedCov) {
+					coverage.Merge(c.globalCov, combinedCov)
+					if c.corpus.Add(input) {
+						c.corpus.Save(input)
+					}
+				}
 			}
 		}
 
@@ -129,6 +129,22 @@ func (c *Coordinator) Run(ctx context.Context) error {
 		c.stats.Update(c.corpus.Len(), coverage.CountBits(c.globalCov), findings)
 		c.stats.PrintIfDue()
 	}
+}
+
+// executeAll runs input through every configured target and returns
+// their outputs plus the merged raw (un-bucketized) coverage bitmap.
+func (c *Coordinator) executeAll(input []byte) (map[string][]byte, []byte, error) {
+	outputs := make(map[string][]byte, len(c.runners))
+	combined := make([]byte, coverage.BitmapSize)
+	for _, r := range c.runners {
+		output, cov, err := r.Execute(input)
+		if err != nil {
+			return nil, nil, fmt.Errorf("target %s: %w", r.Name(), err)
+		}
+		outputs[r.Name()] = output
+		coverage.Merge(combined, cov)
+	}
+	return outputs, combined, nil
 }
 
 func (c *Coordinator) saveFinding(disc *compare.Discrepancy, id int) {
