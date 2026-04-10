@@ -4,6 +4,15 @@
 //
 //	func target(data []byte) ([]byte, error) { ... }
 //	func main() { gofuzz.Run(target) }
+//
+// Build the target with Go's coverage instrumentation enabled. If you
+// only care about code inside your own module, `-coverpkg=./...` is
+// enough; if the target delegates into stdlib or third-party packages
+// (e.g. encoding/base64, encoding/json, a vendored parser) you MUST use
+// `-coverpkg=all`, otherwise those packages are not instrumented and
+// the fuzzer will see a constant bitmap regardless of input:
+//
+//	go build -cover -covermode=atomic -coverpkg=all -o target ./cmd/target
 package gofuzz
 
 import (
