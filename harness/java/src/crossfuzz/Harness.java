@@ -47,6 +47,8 @@ public class Harness {
         covSlice.order(ByteOrder.LITTLE_ENDIAN);
         covSlice.position(COVERAGE_OFFSET);
         covSlice.limit(COVERAGE_OFFSET + 65_536);
+        // Re-initialize with the Harness mapping (agent may have already done this;
+        // both mappings point to the same physical pages so either works).
         CoverageRuntime.init(covSlice.slice());
 
         // Open inherited pipe FDs
