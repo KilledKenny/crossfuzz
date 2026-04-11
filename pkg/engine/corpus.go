@@ -6,10 +6,12 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 // Corpus manages the set of fuzz inputs.
 type Corpus struct {
+	mu       sync.RWMutex
 	entries  [][]byte
 	hashes   map[[32]byte]bool
 	seedDir  string
@@ -56,6 +58,8 @@ func (c *Corpus) Load() error {
 // Returns true if the input was new.
 func (c *Corpus) Add(input []byte) bool {
 	h := sha256.Sum256(input)
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.hashes[h] {
 		return false
 	}
@@ -81,6 +85,8 @@ func (c *Corpus) Save(input []byte) error {
 
 // Pick returns a random corpus entry.
 func (c *Corpus) Pick(rng *rand.Rand) []byte {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	if len(c.entries) == 0 {
 		return nil
 	}
@@ -89,11 +95,15 @@ func (c *Corpus) Pick(rng *rand.Rand) []byte {
 
 // Len returns the number of entries in the corpus.
 func (c *Corpus) Len() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return len(c.entries)
 }
 
 // All returns a snapshot of all corpus entries.
 func (c *Corpus) All() [][]byte {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	result := make([][]byte, len(c.entries))
 	copy(result, c.entries)
 	return result

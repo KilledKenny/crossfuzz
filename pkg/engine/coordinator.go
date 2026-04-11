@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 	"time"
 
 	"crossfuzz/pkg/compare"
@@ -21,40 +22,67 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// WorkerRunners bundles the runner sets for a single parallel fuzzing worker.
+// Each worker gets its own independent set of target processes.
+type WorkerRunners struct {
+	Harness []runner.Runner
+	Servers []*runner.ServerProcess
+}
+
+// workerState holds per-worker mutable state that must not be shared between goroutines.
+type workerState struct {
+	id            int
+	runners       []runner.Runner
+	serverRunners []*runner.ServerProcess
+	mutator       *Mutator
+	rng           *rand.Rand
+}
+
 // Coordinator drives the fuzzing campaign.
 type Coordinator struct {
-	cfg            *config.Config
-	runners        []runner.Runner          // harness runners: drive each iteration via pipes
-	serverRunners  []*runner.ServerProcess  // server runners: coverage-only, no pipes
-	corpus         *Corpus
-	mutator        *Mutator
-	comparator     compare.Comparator
-	stats          *Stats
-	globalCov      []byte
-	perTargetCov   map[string][]byte
-	rng            *rand.Rand
+	cfg        *config.Config
+	workers    []workerState
+	corpus     *Corpus
+	comparator compare.Comparator
+	stats      *Stats
+
+	covMu        sync.Mutex // protects globalCov and perTargetCov
+	globalCov    []byte
+	perTargetCov map[string][]byte
+
+	findingMu     sync.Mutex // protects findingCovs and findingsCount
+	findingCovs   map[[32]byte]bool
+	findingsCount int
+
 	warmupRounds   int
 	validateRounds int
 	maxFindings    int
-	findingCovs    map[[32]byte]bool
 }
 
-// NewCoordinator creates a coordinator for the given config and runners.
-// harnessRunners speak the pipe protocol; serverRunners contribute coverage only.
-func NewCoordinator(cfg *config.Config, harnessRunners []runner.Runner, serverRunners []*runner.ServerProcess, comp compare.Comparator) *Coordinator {
+// NewCoordinator creates a coordinator for the given config, worker runner sets, and comparator.
+// Each WorkerRunners in workerSets gets its own isolated set of target processes and runs
+// the fuzzing loop concurrently with the others, sharing the corpus and global coverage bitmap.
+func NewCoordinator(cfg *config.Config, workerSets []WorkerRunners, comp compare.Comparator) *Coordinator {
 	seed := time.Now().UnixNano()
+	workers := make([]workerState, len(workerSets))
+	for i, ws := range workerSets {
+		workers[i] = workerState{
+			id:            i,
+			runners:       ws.Harness,
+			serverRunners: ws.Servers,
+			mutator:       NewMutator(seed+int64(i), cfg.Campaign.MaxInputSize),
+			rng:           rand.New(rand.NewSource(seed + int64(i) + 1)),
+		}
+	}
 	return &Coordinator{
-		cfg:           cfg,
-		runners:       harnessRunners,
-		serverRunners: serverRunners,
-		corpus:        NewCorpus(cfg.Corpus.SeedDir, cfg.Corpus.CacheDir),
-		mutator:       NewMutator(seed, cfg.Campaign.MaxInputSize),
-		comparator:    comp,
-		stats:         NewStats(),
+		cfg:          cfg,
+		workers:      workers,
+		corpus:       NewCorpus(cfg.Corpus.SeedDir, cfg.Corpus.CacheDir),
+		comparator:   comp,
+		stats:        NewStats(),
 		globalCov:    make([]byte, coverage.BitmapSize),
 		perTargetCov: make(map[string][]byte),
-		rng:          rand.New(rand.NewSource(seed + 1)),
-		findingCovs:   make(map[[32]byte]bool),
+		findingCovs:  make(map[[32]byte]bool),
 	}
 }
 
@@ -127,9 +155,13 @@ func validateStability(runners []runner.Runner, input []byte, n int) []string {
 
 var logCovSometimes = rate.Sometimes{First: 10, Interval: time.Second}
 
-// Warmup runs every corpus entry rounds times to pre-seed the global coverage
-// bitmap before the main fuzzing loop begins.
+// Warmup runs every corpus entry rounds times through worker 0's runners to
+// pre-seed the global coverage bitmap before the main fuzzing loop begins.
 func (c *Coordinator) Warmup(ctx context.Context, rounds int) error {
+	return c.warmupWorker(ctx, &c.workers[0], rounds)
+}
+
+func (c *Coordinator) warmupWorker(ctx context.Context, w *workerState, rounds int) error {
 	if rounds <= 0 {
 		return nil
 	}
@@ -142,19 +174,25 @@ func (c *Coordinator) Warmup(ctx context.Context, rounds int) error {
 				return nil
 			default:
 			}
-			_, _, cov, err := c.executeAll(input)
+			_, _, cov, err := c.executeAll(w, input)
 			if err != nil {
 				return fmt.Errorf("warmup exec: %w", err)
 			}
 			coverage.Bucketize(cov)
+			c.covMu.Lock()
 			coverage.Merge(c.globalCov, cov)
+			c.covMu.Unlock()
 		}
 	}
-	fmt.Printf("Warmup complete. Coverage bits: %d\n", coverage.CountBits(c.globalCov))
+	c.covMu.Lock()
+	bits := coverage.CountBits(c.globalCov)
+	c.covMu.Unlock()
+	fmt.Printf("Warmup complete. Coverage bits: %d\n", bits)
 	return nil
 }
 
 // Run executes the fuzzing campaign until the context is cancelled or timeout.
+// It spawns one goroutine per worker, all sharing the same corpus and global coverage bitmap.
 func (c *Coordinator) Run(ctx context.Context) error {
 	if err := c.corpus.Load(); err != nil {
 		return fmt.Errorf("load corpus: %w", err)
@@ -167,8 +205,11 @@ func (c *Coordinator) Run(ctx context.Context) error {
 		c.corpus.Add([]byte(""))
 	}
 
-	fmt.Printf("Starting campaign %q with %d harness + %d server targets, %d seed inputs\n",
-		c.cfg.Campaign.Name, len(c.runners), len(c.serverRunners), c.corpus.Len())
+	numWorkers := len(c.workers)
+	fmt.Printf("Starting campaign %q with %d worker(s), %d harness + %d server targets each, %d seed inputs\n",
+		c.cfg.Campaign.Name, numWorkers,
+		len(c.workers[0].runners), len(c.workers[0].serverRunners),
+		c.corpus.Len())
 
 	if c.warmupRounds > 0 {
 		if err := c.Warmup(ctx, c.warmupRounds); err != nil {
@@ -182,30 +223,61 @@ func (c *Coordinator) Run(ctx context.Context) error {
 		defer cancel()
 	}
 
-	findings := 0
-	spliceRate := 10 // 1 in N iterations is a splice instead of mutation
+	// workerCtx lets any worker cancel all others (e.g. on max-findings).
+	workerCtx, cancelWorkers := context.WithCancel(ctx)
+	defer cancelWorkers()
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, numWorkers)
+	for i := range c.workers {
+		wg.Add(1)
+		go func(w *workerState) {
+			defer wg.Done()
+			if err := c.runWorker(workerCtx, cancelWorkers, w); err != nil {
+				errCh <- err
+			}
+		}(&c.workers[i])
+	}
+
+	wg.Wait()
+	close(errCh)
+
+	snap := c.stats.Snapshot()
+	fmt.Printf("\n\nCampaign finished. Total execs: %d, Corpus: %d, Findings: %d, Crashes: %d, Timeouts: %d\n",
+		snap.TotalExecs, c.corpus.Len(), c.findingsCount, snap.Crashes, snap.Timeouts)
+
+	for err := range errCh {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// runWorker is the inner fuzzing loop executed by a single worker goroutine.
+// It shares the corpus and globalCov with sibling workers via the coordinator.
+func (c *Coordinator) runWorker(ctx context.Context, cancel context.CancelFunc, w *workerState) error {
+	spliceRate := 10
 
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Printf("\n\nCampaign finished. Total execs: %d, Corpus: %d, Findings: %d, Crashes: %d, Timeouts: %d\n",
-				c.stats.totalExecs, c.corpus.Len(), findings, c.stats.crashes, c.stats.timeouts)
 			return nil
 		default:
 		}
 
 		// Generate input: mostly mutate, occasionally splice.
 		var input []byte
-		base := c.corpus.Pick(c.rng)
-		if c.corpus.Len() > 1 && c.rng.Intn(spliceRate) == 0 {
-			other := c.corpus.Pick(c.rng)
-			input = c.mutator.Splice(base, other)
+		base := c.corpus.Pick(w.rng)
+		if c.corpus.Len() > 1 && w.rng.Intn(spliceRate) == 0 {
+			other := c.corpus.Pick(w.rng)
+			input = w.mutator.Splice(base, other)
 		} else {
-			input = c.mutator.Mutate(base)
+			input = w.mutator.Mutate(base)
 		}
 
 		// Execute on all targets.
-		outputs, perTargetCov, combinedCov, execErr := c.executeAll(input)
+		outputs, perTargetCov, combinedCov, execErr := c.executeAll(w, input)
 		if execErr != nil {
 			if !errors.Is(execErr, errSkipIteration) {
 				fmt.Printf("\nExec error: %v\n", execErr)
@@ -221,18 +293,23 @@ func (c *Coordinator) Run(ctx context.Context) error {
 		// harness-side noise mask, so we accept only bits that show up
 		// in every verification run before claiming new coverage.
 		coverage.Bucketize(combinedCov)
-		if coverage.HasNewBits(c.globalCov, combinedCov) {
+		c.covMu.Lock()
+		isNew := coverage.HasNewBits(c.globalCov, combinedCov)
+		c.covMu.Unlock()
 
+		if isNew {
 			stable := true
 			if c.validateRounds > 0 {
-				if unstable := validateStability(c.runners, input, c.validateRounds); len(unstable) > 0 {
+				if unstable := validateStability(w.runners, input, c.validateRounds); len(unstable) > 0 {
 					fmt.Printf("\n[UNSTABLE] input (%d bytes) discarded — targets with non-deterministic output: %v\n",
 						len(input), unstable)
 					stable = false
 				}
 			}
 			if stable {
+				c.covMu.Lock()
 				coverage.Merge(c.globalCov, combinedCov)
+				c.covMu.Unlock()
 				if c.corpus.Add(input) {
 					if err := c.corpus.Save(input); err != nil {
 						fmt.Printf("\n[WARN] failed to save corpus entry: %v\n", err)
@@ -244,27 +321,36 @@ func (c *Coordinator) Run(ctx context.Context) error {
 		// Compare outputs across targets.
 		if disc := c.comparator.Compare(input, outputs); disc != nil {
 			covKey := sha256.Sum256(combinedCov)
+			c.findingMu.Lock()
 			if c.findingCovs[covKey] {
+				c.findingMu.Unlock()
 				continue
 			}
 			c.findingCovs[covKey] = true
-			findings++
-			minimized, minDisc := Minimize(disc.Input, c.runners, c.comparator)
+			c.findingsCount++
+			findingID := c.findingsCount
+			shouldStop := c.maxFindings > 0 && c.findingsCount >= c.maxFindings
+			c.findingMu.Unlock()
+
+			minimized, minDisc := Minimize(disc.Input, w.runners, c.comparator)
 			if minDisc != nil {
 				disc = minDisc
 			} else {
 				disc.Input = minimized
 			}
-			if err := c.saveFinding(disc, findings); err != nil {
-				fmt.Printf("\n[WARN] failed to save finding #%d: %v\n", findings, err)
+			if err := c.saveFinding(disc, findingID); err != nil {
+				fmt.Printf("\n[WARN] failed to save finding #%d: %v\n", findingID, err)
 			}
-			fmt.Printf("\n[FINDING #%d] %s (input: %d bytes)\n", findings, disc.Description, len(disc.Input))
-			if c.maxFindings > 0 && findings >= c.maxFindings {
+			fmt.Printf("\n[FINDING #%d] %s (input: %d bytes)\n", findingID, disc.Description, len(disc.Input))
+			if shouldStop {
 				fmt.Printf("\nMax findings (%d) reached. Stopping.\n", c.maxFindings)
+				cancel()
 				return nil
 			}
 		}
 
+		// Update per-target coverage accumulator and refresh stats.
+		c.covMu.Lock()
 		for name, cov := range perTargetCov {
 			if acc, ok := c.perTargetCov[name]; ok {
 				coverage.Merge(acc, cov)
@@ -274,11 +360,18 @@ func (c *Coordinator) Run(ctx context.Context) error {
 				c.perTargetCov[name] = acc
 			}
 		}
+		covBits := coverage.CountBits(c.globalCov)
 		targetEdges := make(map[string]int, len(c.perTargetCov))
 		for name, acc := range c.perTargetCov {
 			targetEdges[name] = coverage.CountBits(acc)
 		}
-		c.stats.Update(c.corpus.Len(), coverage.CountBits(c.globalCov), findings, targetEdges)
+		c.covMu.Unlock()
+
+		c.findingMu.Lock()
+		findingsSnapshot := c.findingsCount
+		c.findingMu.Unlock()
+
+		c.stats.Update(c.corpus.Len(), covBits, findingsSnapshot, targetEdges)
 		c.stats.PrintIfDue()
 	}
 }
@@ -291,19 +384,19 @@ var errSkipIteration = errors.New("skip iteration")
 // from server targets. Returns outputs from harness runners, a per-target
 // coverage map, and the merged raw (un-bucketized) coverage bitmap from all targets.
 // On crash or timeout, saves a finding and returns errSkipIteration.
-func (c *Coordinator) executeAll(input []byte) (map[string][]byte, map[string][]byte, []byte, error) {
+func (c *Coordinator) executeAll(w *workerState, input []byte) (map[string][]byte, map[string][]byte, []byte, error) {
 	// Reset server coverage bitmaps before the harness runs so we only
 	// capture edges from this iteration. Harness runners reset themselves
 	// inside Execute().
-	for _, s := range c.serverRunners {
+	for _, s := range w.serverRunners {
 		s.ResetCoverage()
 	}
 
 	// Execute harness runners via the pipe protocol.
-	outputs := make(map[string][]byte, len(c.runners))
-	perTargetCov := make(map[string][]byte, len(c.runners)+len(c.serverRunners))
+	outputs := make(map[string][]byte, len(w.runners))
+	perTargetCov := make(map[string][]byte, len(w.runners)+len(w.serverRunners))
 	combined := make([]byte, coverage.BitmapSize)
-	for _, r := range c.runners {
+	for _, r := range w.runners {
 		output, cov, err := r.Execute(input)
 		if err != nil {
 			var te *runner.TimeoutError
@@ -333,7 +426,7 @@ func (c *Coordinator) executeAll(input []byte) (map[string][]byte, map[string][]
 	}
 
 	// Read coverage accumulated by server targets while the harness ran.
-	for _, s := range c.serverRunners {
+	for _, s := range w.serverRunners {
 		_, cov, err := s.Execute(input)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("server target %s: %w", s.Name(), err)

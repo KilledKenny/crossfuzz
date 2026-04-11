@@ -62,6 +62,24 @@ func (s *Stats) Update(corpusSize, coverBits, findings int, targetEdges map[stri
 	s.mu.Unlock()
 }
 
+// StatsSnapshot holds a point-in-time copy of key stats values.
+type StatsSnapshot struct {
+	TotalExecs uint64
+	Crashes    int
+	Timeouts   int
+}
+
+// Snapshot returns a consistent copy of the current stats values.
+func (s *Stats) Snapshot() StatsSnapshot {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return StatsSnapshot{
+		TotalExecs: s.totalExecs,
+		Crashes:    s.crashes,
+		Timeouts:   s.timeouts,
+	}
+}
+
 // PrintIfDue prints stats to stderr at most every 3 seconds.
 func (s *Stats) PrintIfDue() {
 	s.mu.Lock()

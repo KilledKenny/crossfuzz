@@ -38,6 +38,7 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  --corpus=DIR            Directory for corpus entries (default: corpus)\n")
 	fmt.Fprintf(os.Stderr, "  --findings=DIR          Directory for saving findings (default: findings)\n")
 	fmt.Fprintf(os.Stderr, "  --corpus-reduced=DIR    Output directory for reduced corpus (reduce command only, default: corpus-reduced)\n")
+	fmt.Fprintf(os.Stderr, "  --workers=N             Number of parallel fuzzing workers, each with their own target processes (default: 1)\n")
 	fmt.Fprintf(os.Stderr, "  --debug-edge            Print per-target edge counts in status ticker (run command only)\n")
 	fmt.Fprintf(os.Stderr, "  --payload=STRING        Payload bytes to send (analyze command only)\n")
 	fmt.Fprintf(os.Stderr, "  --payload-path=PATH     File or directory of payloads to send (analyze command only)\n")
@@ -62,6 +63,7 @@ func main() {
 	findingsFlag := fs.String("findings", "findings", "Directory for saving findings (run command only)")
 	corpusReducedFlag := fs.String("corpus-reduced", "corpus-reduced", "Output directory for reduced corpus (reduce command only)")
 	debugEdgeFlag := fs.Bool("debug-edge", false, "Print per-target edge counts in status ticker (run command only)")
+	workersFlag := fs.Int("workers", 1, "Number of parallel fuzzing workers, each with their own target processes (run command only)")
 	payloadFlag := fs.String("payload", "", "Payload string to send to all targets (analyze command only)")
 	payloadPathFlag := fs.String("payload-path", "", "File or directory of payloads to send (analyze command only)")
 	fs.Usage = usage
@@ -113,7 +115,7 @@ func main() {
 		if *buildFlag {
 			cmdBuild(cfg)
 		}
-		cmdRun(cfg, *warmupFlag, *validateFlag, *maxFindingsFlag, *debugEdgeFlag, memLimit)
+		cmdRun(cfg, *warmupFlag, *validateFlag, *maxFindingsFlag, *debugEdgeFlag, memLimit, *workersFlag)
 	case "reduce":
 		if *buildFlag {
 			cmdBuild(cfg)
@@ -246,8 +248,11 @@ func stopRunners(runners []runner.Runner) {
 	}
 }
 
-func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debugEdge bool, memLimit uint64) {
-	harness, servers := buildRunners(cfg, memLimit)
+func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debugEdge bool, memLimit uint64, numWorkers int) {
+	if numWorkers < 1 {
+		fmt.Fprintf(os.Stderr, "--workers must be at least 1\n")
+		os.Exit(1)
+	}
 
 	var comp compare.Comparator
 	switch cfg.Comparator.Type {
@@ -272,14 +277,22 @@ func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debug
 		os.Exit(1)
 	}
 
-	all := allRunners(harness, servers)
-	startRunners(all)
-	defer stopRunners(all)
+	// Build one independent set of target processes per worker.
+	workerSets := make([]engine.WorkerRunners, numWorkers)
+	var allFlat []runner.Runner
+	for i := range workerSets {
+		harness, servers := buildRunners(cfg, memLimit)
+		workerSets[i] = engine.WorkerRunners{Harness: harness, Servers: servers}
+		allFlat = append(allFlat, allRunners(harness, servers)...)
+	}
+
+	startRunners(allFlat)
+	defer stopRunners(allFlat)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	coord := engine.NewCoordinator(cfg, harness, servers, comp)
+	coord := engine.NewCoordinator(cfg, workerSets, comp)
 	coord.SetWarmupRounds(warmup)
 	coord.SetValidateRounds(validate)
 	coord.SetMaxFindings(maxFindings)
