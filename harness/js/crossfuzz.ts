@@ -152,7 +152,14 @@ export function resetCoverage(): void {
 
 // ---- main harness entry point ----
 
-export async function run(target: TargetFn): Promise<void> {
+export interface RunSettings {
+  // When true, coverage is not written to shared memory after each iteration.
+  // Use this when the harness is only a trigger and coverage should come
+  // entirely from instrumented server targets.
+  disableInstrumentation?: boolean;
+}
+
+export async function run(target: TargetFn, settings: RunSettings = {}): Promise<void> {
   const shmPath = process.env.CROSSFUZZ_SHM;
   if (!shmPath) {
     process.stderr.write("crossfuzz: CROSSFUZZ_SHM not set\n");
@@ -204,7 +211,9 @@ export async function run(target: TargetFn): Promise<void> {
       writeU32LE(shm, OFF_STATUS, status);
       shm.set(outBytes, OUTPUT_OFFSET);
 
-      collectCoverage(shm.subarray(COVERAGE_OFFSET, COVERAGE_OFFSET + COVERAGE_SIZE));
+      if (!settings.disableInstrumentation) {
+        collectCoverage(shm.subarray(COVERAGE_OFFSET, COVERAGE_OFFSET + COVERAGE_SIZE));
+      }
 
       writeMsg('{"type":"fuzz_result","ok":true}');
     }

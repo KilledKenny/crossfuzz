@@ -1,4 +1,4 @@
-import { run, resetCoverage } from "../../harness/js/crossfuzz";
+import { run } from "../../harness/js/crossfuzz";
 const url = "http://127.0.0.1:8000";
 
 function fuzzInflate(bytes) {
@@ -78,10 +78,6 @@ async function harnes(input) {
     //console.error("Request failed:", error.message);
   }
 
-  // This harness only triggers behavior in the server targets; its own
-  // coverage is not meaningful. Zero Istanbul counters so the coordinator
-  // sees null metrics from this target every iteration.
-  resetCoverage();
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -90,7 +86,9 @@ async function main() {
   //Sleep 1 sec to give the servers a chance to start before we connect to the fuzzer
   await sleep(1000);
 
-  run(harnes);
+  // This harness only triggers behavior in the server targets; its own
+  // coverage is not meaningful.
+  run(harnes, { disableInstrumentation: true });
 }
 
 main();
