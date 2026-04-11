@@ -87,6 +87,10 @@ func (p *Process) Start() error {
 	p.cmd.Stdout = os.Stdout
 	p.cmd.Stderr = os.Stderr
 	p.cmd.ExtraFiles = []*os.File{cmdR, respW} // fd 3, fd 4
+	// Place the child in its own process group so that terminal signals
+	// (e.g. Ctrl+C / SIGINT) do not propagate to it. The coordinator owns
+	// the child's lifecycle and kills it explicitly via Stop().
+	p.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	env := append(os.Environ(), fmt.Sprintf("CROSSFUZZ_SHM=%s", p.shm.Path()))
 	env = append(env, p.cfg.Env...)
@@ -228,9 +232,9 @@ func (p *Process) reapAndRestart() (*os.ProcessState, error) {
 // Stop terminates the target process and cleans up all resources.
 func (p *Process) Stop() error {
 	if p.cmdW != nil {
-		if err := protocol.Encode(p.cmdW, &protocol.Message{Type: protocol.TypeShutdown}); err != nil {
-			fmt.Fprintf(os.Stderr, "crossfuzz: send shutdown to %s: %v\n", p.cfg.Name, err)
-		}
+		// Best-effort: ask the target to shut down cleanly. Ignore write
+		// errors — the process may have already exited (e.g. on campaign end).
+		_ = protocol.Encode(p.cmdW, &protocol.Message{Type: protocol.TypeShutdown})
 		p.cmdW.Close()
 		p.cmdW = nil
 	}

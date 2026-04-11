@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"syscall"
 
 	"crossfuzz/pkg/coverage"
 )
@@ -43,6 +44,7 @@ func (s *ServerProcess) Start() error {
 	s.cmd = exec.Command(s.binary, s.args...)
 	s.cmd.Stdout = os.Stdout
 	s.cmd.Stderr = os.Stderr
+	s.cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	env := append(os.Environ(), fmt.Sprintf("CROSSFUZZ_SHM=%s", s.shm.Path()))
 	env = append(env, s.env...)
