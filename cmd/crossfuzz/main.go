@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 
 	"crossfuzz/pkg/compare"
@@ -20,12 +22,14 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "Commands:\n")
 	fmt.Fprintf(os.Stderr, "  build   Build all targets\n")
 	fmt.Fprintf(os.Stderr, "  run     Run differential fuzzing campaign\n")
+	fmt.Fprintf(os.Stderr, "  reduce  Deduplicate corpus by coverage profile\n")
 	fmt.Fprintf(os.Stderr, "Flags:\n")
-	fmt.Fprintf(os.Stderr, "  --name=fuzz1,fuzz2   Comma-separated list of target names to build/run (default: all)\n")
-	fmt.Fprintf(os.Stderr, "  --build              Build all targets before running (run command only)\n")
-	fmt.Fprintf(os.Stderr, "  --warmup=N           Run corpus N times before the main fuzzing loop (run command only)\n")
-	fmt.Fprintf(os.Stderr, "  --corpus=DIR         Directory for corpus entries (default: corpus)\n")
-	fmt.Fprintf(os.Stderr, "  --findings=DIR       Directory for saving findings (default: findings)\n")
+	fmt.Fprintf(os.Stderr, "  --name=fuzz1,fuzz2      Comma-separated list of target names to build/run (default: all)\n")
+	fmt.Fprintf(os.Stderr, "  --build                 Build all targets before running (run command only)\n")
+	fmt.Fprintf(os.Stderr, "  --warmup=N              Run corpus N times before the main fuzzing loop (run command only)\n")
+	fmt.Fprintf(os.Stderr, "  --corpus=DIR            Directory for corpus entries (default: corpus)\n")
+	fmt.Fprintf(os.Stderr, "  --findings=DIR          Directory for saving findings (default: findings)\n")
+	fmt.Fprintf(os.Stderr, "  --corpus-reduced=DIR    Output directory for reduced corpus (reduce command only, default: corpus-reduced)\n")
 }
 
 func main() {
@@ -41,6 +45,7 @@ func main() {
 	warmupFlag := fs.Int("warmup", 0, "Number of times to run the corpus before the main fuzzing loop (run command only)")
 	corpusFlag := fs.String("corpus", "corpus", "Directory for storing and loading corpus entries (run command only)")
 	findingsFlag := fs.String("findings", "findings", "Directory for saving findings (run command only)")
+	corpusReducedFlag := fs.String("corpus-reduced", "corpus-reduced", "Output directory for reduced corpus (reduce command only)")
 	fs.Usage = usage
 
 	// os.Args[2] is the config file; flags follow after
@@ -76,6 +81,11 @@ func main() {
 			cmdBuild(cfg)
 		}
 		cmdRun(cfg, *warmupFlag)
+	case "reduce":
+		if isFlagSet(fs, "corpus") || cfg.Corpus.CacheDir == "" {
+			cfg.Corpus.CacheDir = *corpusFlag
+		}
+		cmdReduce(cfg, *corpusReducedFlag)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		os.Exit(1)
@@ -126,7 +136,7 @@ func cmdBuild(cfg *config.Config) {
 	fmt.Println("Build complete.")
 }
 
-func cmdRun(cfg *config.Config, warmup int) {
+func buildRunners(cfg *config.Config) []runner.Runner {
 	var runners []runner.Runner
 	for _, tc := range cfg.Targets {
 		r, err := runner.NewProcess(runner.ProcessConfig{
@@ -142,6 +152,30 @@ func cmdRun(cfg *config.Config, warmup int) {
 		}
 		runners = append(runners, r)
 	}
+	return runners
+}
+
+func startRunners(runners []runner.Runner) {
+	for _, r := range runners {
+		if err := r.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error starting %s: %v\n", r.Name(), err)
+			for _, r2 := range runners {
+				r2.Stop()
+			}
+			os.Exit(1)
+		}
+		fmt.Printf("Started target: %s\n", r.Name())
+	}
+}
+
+func stopRunners(runners []runner.Runner) {
+	for _, r := range runners {
+		r.Stop()
+	}
+}
+
+func cmdRun(cfg *config.Config, warmup int) {
+	runners := buildRunners(cfg)
 
 	var comp compare.Comparator
 	switch cfg.Comparator.Type {
@@ -164,21 +198,8 @@ func cmdRun(cfg *config.Config, warmup int) {
 		os.Exit(1)
 	}
 
-	for _, r := range runners {
-		if err := r.Start(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error starting %s: %v\n", r.Name(), err)
-			for _, r2 := range runners {
-				r2.Stop()
-			}
-			os.Exit(1)
-		}
-		fmt.Printf("Started target: %s\n", r.Name())
-	}
-	defer func() {
-		for _, r := range runners {
-			r.Stop()
-		}
-	}()
+	startRunners(runners)
+	defer stopRunners(runners)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
@@ -189,4 +210,36 @@ func cmdRun(cfg *config.Config, warmup int) {
 		fmt.Fprintf(os.Stderr, "Campaign error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func cmdReduce(cfg *config.Config, outDir string) {
+	runners := buildRunners(cfg)
+	startRunners(runners)
+	defer stopRunners(runners)
+
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer cancel()
+
+	fmt.Printf("Reducing corpus in %q...\n", cfg.Corpus.CacheDir)
+	result, err := engine.Reduce(ctx, cfg, runners)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Reduce error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := os.MkdirAll(outDir, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating output dir: %v\n", err)
+		os.Exit(1)
+	}
+
+	for _, input := range result.Kept {
+		h := sha256.Sum256(input)
+		name := fmt.Sprintf("%x", h[:8])
+		if err := os.WriteFile(filepath.Join(outDir, name), input, 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing corpus entry: %v\n", err)
+			os.Exit(1)
+		}
+	}
+
+	fmt.Printf("Reduced %d → %d entries (saved to %q)\n", result.Total, len(result.Kept), outDir)
 }
