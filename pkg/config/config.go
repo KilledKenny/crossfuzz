@@ -77,11 +77,5 @@ func Load(path string) (*Config, error) {
 	if cfg.Campaign.Timeout.Duration == 0 {
 		cfg.Campaign.Timeout.Duration = time.Hour
 	}
-	if cfg.Corpus.CacheDir == "" {
-		cfg.Corpus.CacheDir = "./cache"
-	}
-	if cfg.Corpus.FindingsDir == "" {
-		cfg.Corpus.FindingsDir = "./findings"
-	}
 	return &cfg, nil
 }

@@ -24,6 +24,8 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  --name=fuzz1,fuzz2   Comma-separated list of target names to build/run (default: all)\n")
 	fmt.Fprintf(os.Stderr, "  --build              Build all targets before running (run command only)\n")
 	fmt.Fprintf(os.Stderr, "  --warmup=N           Run corpus N times before the main fuzzing loop (run command only)\n")
+	fmt.Fprintf(os.Stderr, "  --corpus=DIR         Directory for corpus entries (default: corpus)\n")
+	fmt.Fprintf(os.Stderr, "  --findings=DIR       Directory for saving findings (default: findings)\n")
 }
 
 func main() {
@@ -37,6 +39,8 @@ func main() {
 	nameFlag := fs.String("name", "", "Comma-separated list of target names to build/run (default: all)")
 	buildFlag := fs.Bool("build", false, "Build all targets before running (run command only)")
 	warmupFlag := fs.Int("warmup", 0, "Number of times to run the corpus before the main fuzzing loop (run command only)")
+	corpusFlag := fs.String("corpus", "corpus", "Directory for storing and loading corpus entries (run command only)")
+	findingsFlag := fs.String("findings", "findings", "Directory for saving findings (run command only)")
 	fs.Usage = usage
 
 	// os.Args[2] is the config file; flags follow after
@@ -62,6 +66,12 @@ func main() {
 	case "build":
 		cmdBuild(cfg)
 	case "run":
+		if isFlagSet(fs, "corpus") || cfg.Corpus.CacheDir == "" {
+			cfg.Corpus.CacheDir = *corpusFlag
+		}
+		if isFlagSet(fs, "findings") || cfg.Corpus.FindingsDir == "" {
+			cfg.Corpus.FindingsDir = *findingsFlag
+		}
 		if *buildFlag {
 			cmdBuild(cfg)
 		}
@@ -70,6 +80,16 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		os.Exit(1)
 	}
+}
+
+func isFlagSet(fs *flag.FlagSet, name string) bool {
+	found := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == name {
+			found = true
+		}
+	})
+	return found
 }
 
 func filterTargets(targets []config.TargetConfig, nameList string) []config.TargetConfig {
