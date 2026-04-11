@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"strings"
 
 	"crossfuzz/pkg/config"
 	"crossfuzz/pkg/coverage"
@@ -20,9 +21,11 @@ type ReduceResult struct {
 
 // Reduce loads the corpus, executes every entry through the targets, and
 // deduplicates by coverage profile: when two inputs produce identical
-// bucketized coverage bitmaps the shorter one is kept. Returns the reduced
+// bucketized coverage bitmaps the shorter one is kept. If validateRounds > 0,
+// each entry is executed that many extra times; entries whose output is
+// non-deterministic across runs are logged and skipped. Returns the reduced
 // set of inputs and a count of how many were evaluated.
-func Reduce(ctx context.Context, cfg *config.Config, runners []runner.Runner) (*ReduceResult, error) {
+func Reduce(ctx context.Context, cfg *config.Config, runners []runner.Runner, validateRounds int) (*ReduceResult, error) {
 	corpus := NewCorpus(cfg.Corpus.SeedDir, cfg.Corpus.CacheDir)
 	if err := corpus.Load(); err != nil {
 		return nil, fmt.Errorf("load corpus: %w", err)
@@ -37,6 +40,14 @@ func Reduce(ctx context.Context, cfg *config.Config, runners []runner.Runner) (*
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		default:
+		}
+
+		if validateRounds > 0 {
+			if unstable := validateStability(runners, input, validateRounds); len(unstable) > 0 {
+				fmt.Printf("  [%d/%d] skipped (unstable output on targets: %s)\n",
+					i+1, len(entries), strings.Join(unstable, ", "))
+				continue
+			}
 		}
 
 		combined := make([]byte, coverage.BitmapSize)

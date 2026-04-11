@@ -27,6 +27,8 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  --name=fuzz1,fuzz2      Comma-separated list of target names to build/run (default: all)\n")
 	fmt.Fprintf(os.Stderr, "  --build                 Build all targets before running (run command only)\n")
 	fmt.Fprintf(os.Stderr, "  --warmup=N              Run corpus N times before the main fuzzing loop (run command only)\n")
+	fmt.Fprintf(os.Stderr, "  --max-findings=N        Stop after N unique findings (run command only, default: 10)\n")
+	fmt.Fprintf(os.Stderr, "  --validate=N            Re-execute each new input N times; log unstable inputs and which targets differ\n")
 	fmt.Fprintf(os.Stderr, "  --corpus=DIR            Directory for corpus entries (default: corpus)\n")
 	fmt.Fprintf(os.Stderr, "  --findings=DIR          Directory for saving findings (default: findings)\n")
 	fmt.Fprintf(os.Stderr, "  --corpus-reduced=DIR    Output directory for reduced corpus (reduce command only, default: corpus-reduced)\n")
@@ -43,6 +45,8 @@ func main() {
 	nameFlag := fs.String("name", "", "Comma-separated list of target names to build/run (default: all)")
 	buildFlag := fs.Bool("build", false, "Build all targets before running (run command only)")
 	warmupFlag := fs.Int("warmup", 0, "Number of times to run the corpus before the main fuzzing loop (run command only)")
+	maxFindingsFlag := fs.Int("max-findings", 10, "Stop after this many unique findings (run command only)")
+	validateFlag := fs.Int("validate", 0, "Re-execute each new input N times to confirm stable output; log unstable inputs with differing targets")
 	corpusFlag := fs.String("corpus", "corpus", "Directory for storing and loading corpus entries (run command only)")
 	findingsFlag := fs.String("findings", "findings", "Directory for saving findings (run command only)")
 	corpusReducedFlag := fs.String("corpus-reduced", "corpus-reduced", "Output directory for reduced corpus (reduce command only)")
@@ -80,12 +84,12 @@ func main() {
 		if *buildFlag {
 			cmdBuild(cfg)
 		}
-		cmdRun(cfg, *warmupFlag)
+		cmdRun(cfg, *warmupFlag, *validateFlag, *maxFindingsFlag)
 	case "reduce":
 		if isFlagSet(fs, "corpus") || cfg.Corpus.CacheDir == "" {
 			cfg.Corpus.CacheDir = *corpusFlag
 		}
-		cmdReduce(cfg, *corpusReducedFlag)
+		cmdReduce(cfg, *corpusReducedFlag, *validateFlag)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		os.Exit(1)
@@ -174,7 +178,7 @@ func stopRunners(runners []runner.Runner) {
 	}
 }
 
-func cmdRun(cfg *config.Config, warmup int) {
+func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int) {
 	runners := buildRunners(cfg)
 
 	var comp compare.Comparator
@@ -206,13 +210,15 @@ func cmdRun(cfg *config.Config, warmup int) {
 
 	coord := engine.NewCoordinator(cfg, runners, comp)
 	coord.SetWarmupRounds(warmup)
+	coord.SetValidateRounds(validate)
+	coord.SetMaxFindings(maxFindings)
 	if err := coord.Run(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "Campaign error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func cmdReduce(cfg *config.Config, outDir string) {
+func cmdReduce(cfg *config.Config, outDir string, validate int) {
 	runners := buildRunners(cfg)
 	startRunners(runners)
 	defer stopRunners(runners)
@@ -221,7 +227,7 @@ func cmdReduce(cfg *config.Config, outDir string) {
 	defer cancel()
 
 	fmt.Printf("Reducing corpus in %q...\n", cfg.Corpus.CacheDir)
-	result, err := engine.Reduce(ctx, cfg, runners)
+	result, err := engine.Reduce(ctx, cfg, runners, validate)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Reduce error: %v\n", err)
 		os.Exit(1)

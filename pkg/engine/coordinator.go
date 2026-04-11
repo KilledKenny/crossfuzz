@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"crossfuzz/pkg/compare"
@@ -20,16 +22,18 @@ import (
 
 // Coordinator drives the fuzzing campaign.
 type Coordinator struct {
-	cfg          *config.Config
-	runners      []runner.Runner
-	corpus       *Corpus
-	mutator      *Mutator
-	comparator   compare.Comparator
-	stats        *Stats
-	globalCov    []byte
-	rng          *rand.Rand
-	warmupRounds int
-	findingCovs  map[[32]byte]bool
+	cfg            *config.Config
+	runners        []runner.Runner
+	corpus         *Corpus
+	mutator        *Mutator
+	comparator     compare.Comparator
+	stats          *Stats
+	globalCov      []byte
+	rng            *rand.Rand
+	warmupRounds   int
+	validateRounds int
+	maxFindings    int
+	findingCovs    map[[32]byte]bool
 }
 
 // NewCoordinator creates a coordinator for the given config and runners.
@@ -53,6 +57,61 @@ func NewCoordinator(cfg *config.Config, runners []runner.Runner, comp compare.Co
 // pre-seed the global coverage bitmap.
 func (c *Coordinator) SetWarmupRounds(n int) {
 	c.warmupRounds = n
+}
+
+// SetValidateRounds configures how many extra times each new interesting input
+// is re-executed to confirm it is stable before being added to the corpus.
+func (c *Coordinator) SetValidateRounds(n int) {
+	c.validateRounds = n
+}
+
+// SetMaxFindings configures the maximum number of unique findings before the
+// campaign stops. A value of 0 means no limit.
+func (c *Coordinator) SetMaxFindings(n int) {
+	c.maxFindings = n
+}
+
+// validateStability runs input through all runners n times and checks whether
+// each target produces identical output or coverage on every run. Returns the
+// names of any targets whose output or coverage changed across runs (sorted).
+// An empty slice means the input is stable. n <= 0 always returns stable.
+func validateStability(runners []runner.Runner, input []byte, n int) []string {
+	if n <= 0 {
+		return nil
+	}
+	firstOutput := make(map[string][]byte, len(runners))
+	firstCoverage := make(map[string][]byte, len(runners))
+	unstable := make(map[string]bool)
+
+	for i := 0; i < n; i++ {
+		for _, r := range runners {
+			if unstable[r.Name()] {
+				continue
+			}
+			output, coverage, err := r.Execute(input)
+			if err != nil {
+				continue
+			}
+			if i == 0 {
+				firstOutput[r.Name()] = output
+				firstCoverage[r.Name()] = coverage
+			} else if !bytes.Equal(firstOutput[r.Name()], output) {
+				unstable[r.Name()] = true
+			} else if !bytes.Equal(firstCoverage[r.Name()], coverage) {
+				unstable[r.Name()] = true
+			}
+		}
+	}
+
+	if len(unstable) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(unstable))
+	for name := range unstable {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 var logCovSometimes = rate.Sometimes{First: 10, Interval: time.Second}
@@ -141,24 +200,26 @@ func (c *Coordinator) Run(ctx context.Context) error {
 
 		c.stats.RecordExec()
 
-		// Check for new coverage. Re-run once to filter out flaky
-		// edges — Go's runtime/coverage instrumentation still emits a
-		// small amount of noise on GC/scheduler paths even after the
+		// Check for new coverage. Re-run to filter out flaky edges —
+		// Go's runtime/coverage instrumentation still emits a small
+		// amount of noise on GC/scheduler paths even after the
 		// harness-side noise mask, so we accept only bits that show up
-		// in BOTH runs before claiming new coverage.
+		// in every verification run before claiming new coverage.
 		coverage.Bucketize(combinedCov)
 		if coverage.HasNewBits(c.globalCov, combinedCov) {
-			_, verifyCov, verifyErr := c.executeAll(input)
-			if verifyErr == nil {
-				coverage.Bucketize(verifyCov)
-				for i := range combinedCov {
-					combinedCov[i] &= verifyCov[i]
+
+			stable := true
+			if c.validateRounds > 0 {
+				if unstable := validateStability(c.runners, input, c.validateRounds); len(unstable) > 0 {
+					fmt.Printf("\n[UNSTABLE] input (%d bytes) discarded — targets with non-deterministic output: %v\n",
+						len(input), unstable)
+					stable = false
 				}
-				if coverage.HasNewBits(c.globalCov, combinedCov) {
-					coverage.Merge(c.globalCov, combinedCov)
-					if c.corpus.Add(input) {
-						c.corpus.Save(input)
-					}
+			}
+			if stable {
+				coverage.Merge(c.globalCov, combinedCov)
+				if c.corpus.Add(input) {
+					c.corpus.Save(input)
 				}
 			}
 		}
@@ -179,6 +240,10 @@ func (c *Coordinator) Run(ctx context.Context) error {
 			}
 			c.saveFinding(disc, findings)
 			fmt.Printf("\n[FINDING #%d] %s (input: %d bytes)\n", findings, disc.Description, len(disc.Input))
+			if c.maxFindings > 0 && findings >= c.maxFindings {
+				fmt.Printf("\nMax findings (%d) reached. Stopping.\n", c.maxFindings)
+				return nil
+			}
 		}
 
 		c.stats.Update(c.corpus.Len(), coverage.CountBits(c.globalCov), findings)
@@ -214,13 +279,13 @@ func (c *Coordinator) saveFinding(disc *compare.Discrepancy, id int) {
 	}
 
 	type metadata struct {
-		ID          int               `json:"id"`
-		Hash        string            `json:"hash"`
-		Comparator  string            `json:"comparator"`
-		Description string            `json:"description"`
-		InputLen    int               `json:"input_len"`
-		OutputLens  map[string]int    `json:"output_lens"`
-		Timestamp   string            `json:"timestamp"`
+		ID          int            `json:"id"`
+		Hash        string         `json:"hash"`
+		Comparator  string         `json:"comparator"`
+		Description string         `json:"description"`
+		InputLen    int            `json:"input_len"`
+		OutputLens  map[string]int `json:"output_lens"`
+		Timestamp   string         `json:"timestamp"`
 	}
 	lens := make(map[string]int, len(disc.Outputs))
 	for name, out := range disc.Outputs {
