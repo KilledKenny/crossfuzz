@@ -29,20 +29,22 @@ type Coordinator struct {
 	globalCov    []byte
 	rng          *rand.Rand
 	warmupRounds int
+	findingCovs  map[[32]byte]bool
 }
 
 // NewCoordinator creates a coordinator for the given config and runners.
 func NewCoordinator(cfg *config.Config, runners []runner.Runner, comp compare.Comparator) *Coordinator {
 	seed := time.Now().UnixNano()
 	return &Coordinator{
-		cfg:        cfg,
-		runners:    runners,
-		corpus:     NewCorpus(cfg.Corpus.SeedDir, cfg.Corpus.CacheDir),
-		mutator:    NewMutator(seed, cfg.Campaign.MaxInputSize),
-		comparator: comp,
-		stats:      NewStats(),
-		globalCov:  make([]byte, coverage.BitmapSize),
-		rng:        rand.New(rand.NewSource(seed + 1)),
+		cfg:         cfg,
+		runners:     runners,
+		corpus:      NewCorpus(cfg.Corpus.SeedDir, cfg.Corpus.CacheDir),
+		mutator:     NewMutator(seed, cfg.Campaign.MaxInputSize),
+		comparator:  comp,
+		stats:       NewStats(),
+		globalCov:   make([]byte, coverage.BitmapSize),
+		rng:         rand.New(rand.NewSource(seed + 1)),
+		findingCovs: make(map[[32]byte]bool),
 	}
 }
 
@@ -163,6 +165,11 @@ func (c *Coordinator) Run(ctx context.Context) error {
 
 		// Compare outputs across targets.
 		if disc := c.comparator.Compare(input, outputs); disc != nil {
+			covKey := sha256.Sum256(combinedCov)
+			if c.findingCovs[covKey] {
+				continue
+			}
+			c.findingCovs[covKey] = true
 			findings++
 			minimized, minDisc := Minimize(disc.Input, c.runners, c.comparator)
 			if minDisc != nil {
