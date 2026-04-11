@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"os"
@@ -20,9 +21,10 @@ import (
 func usage() {
 	fmt.Fprintf(os.Stderr, "Usage: crossfuzz <command> <config.toml> [flags]\n")
 	fmt.Fprintf(os.Stderr, "Commands:\n")
-	fmt.Fprintf(os.Stderr, "  build   Build all targets\n")
-	fmt.Fprintf(os.Stderr, "  run     Run differential fuzzing campaign\n")
-	fmt.Fprintf(os.Stderr, "  reduce  Deduplicate corpus by coverage profile\n")
+	fmt.Fprintf(os.Stderr, "  build    Build all targets\n")
+	fmt.Fprintf(os.Stderr, "  run      Run differential fuzzing campaign\n")
+	fmt.Fprintf(os.Stderr, "  reduce   Deduplicate corpus by coverage profile\n")
+	fmt.Fprintf(os.Stderr, "  analyze  Run a payload against all targets and print hex output\n")
 	fmt.Fprintf(os.Stderr, "Flags:\n")
 	fmt.Fprintf(os.Stderr, "  --name=fuzz1,fuzz2      Comma-separated list of target names to build/run (default: all)\n")
 	fmt.Fprintf(os.Stderr, "  --build                 Build all targets before running (run command only)\n")
@@ -33,6 +35,8 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  --findings=DIR          Directory for saving findings (default: findings)\n")
 	fmt.Fprintf(os.Stderr, "  --corpus-reduced=DIR    Output directory for reduced corpus (reduce command only, default: corpus-reduced)\n")
 	fmt.Fprintf(os.Stderr, "  --debug-edge            Print per-target edge counts in status ticker (run command only)\n")
+	fmt.Fprintf(os.Stderr, "  --payload=STRING        Payload bytes to send (analyze command only)\n")
+	fmt.Fprintf(os.Stderr, "  --payload-path=PATH     File or directory of payloads to send (analyze command only)\n")
 }
 
 func main() {
@@ -52,6 +56,8 @@ func main() {
 	findingsFlag := fs.String("findings", "findings", "Directory for saving findings (run command only)")
 	corpusReducedFlag := fs.String("corpus-reduced", "corpus-reduced", "Output directory for reduced corpus (reduce command only)")
 	debugEdgeFlag := fs.Bool("debug-edge", false, "Print per-target edge counts in status ticker (run command only)")
+	payloadFlag := fs.String("payload", "", "Payload string to send to all targets (analyze command only)")
+	payloadPathFlag := fs.String("payload-path", "", "File or directory of payloads to send (analyze command only)")
 	fs.Usage = usage
 
 	// os.Args[2] is the config file; flags follow after
@@ -92,6 +98,12 @@ func main() {
 			cfg.Corpus.CacheDir = *corpusFlag
 		}
 		cmdReduce(cfg, *corpusReducedFlag, *validateFlag)
+	case "analyze":
+		if *payloadFlag == "" && *payloadPathFlag == "" {
+			fmt.Fprintf(os.Stderr, "analyze requires --payload or --payload-path\n")
+			os.Exit(1)
+		}
+		cmdAnalyze(cfg, *payloadFlag, *payloadPathFlag)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		os.Exit(1)
@@ -282,4 +294,83 @@ func cmdReduce(cfg *config.Config, outDir string, validate int) {
 	}
 
 	fmt.Printf("Reduced %d → %d entries (saved to %q)\n", result.Total, len(result.Kept), outDir)
+}
+
+func cmdAnalyze(cfg *config.Config, payload string, payloadPath string) {
+	harness, servers := buildRunners(cfg)
+	all := allRunners(harness, servers)
+	startRunners(all)
+	defer stopRunners(all)
+
+	var payloads []struct {
+		name  string
+		data  []byte
+	}
+
+	if payload != "" {
+		payloads = append(payloads, struct {
+			name string
+			data []byte
+		}{name: "<payload>", data: []byte(payload)})
+	}
+
+	if payloadPath != "" {
+		info, err := os.Stat(payloadPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error accessing payload path: %v\n", err)
+			os.Exit(1)
+		}
+		if info.IsDir() {
+			entries, err := os.ReadDir(payloadPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error reading payload directory: %v\n", err)
+				os.Exit(1)
+			}
+			for _, entry := range entries {
+				if entry.IsDir() {
+					continue
+				}
+				p := filepath.Join(payloadPath, entry.Name())
+				data, err := os.ReadFile(p)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error reading %s: %v\n", p, err)
+					os.Exit(1)
+				}
+				payloads = append(payloads, struct {
+					name string
+					data []byte
+				}{name: entry.Name(), data: data})
+			}
+		} else {
+			data, err := os.ReadFile(payloadPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error reading payload file: %v\n", err)
+				os.Exit(1)
+			}
+			payloads = append(payloads, struct {
+				name string
+				data []byte
+			}{name: filepath.Base(payloadPath), data: data})
+		}
+	}
+
+	if len(payloads) == 0 {
+		fmt.Fprintln(os.Stderr, "No payloads to run.")
+		os.Exit(1)
+	}
+
+	for _, p := range payloads {
+		fmt.Printf("=== Payload: %s (%d bytes) ===\n", p.name, len(p.data))
+		fmt.Printf("Input:\n%s\n", hex.Dump(p.data))
+		for _, r := range all {
+			output, _, err := r.Execute(p.data)
+			fmt.Printf("--- Target: %s ---\n", r.Name())
+			if err != nil {
+				fmt.Printf("Error: %v\n", err)
+			} else {
+				fmt.Print(hex.Dump(output))
+			}
+		}
+		fmt.Println()
+	}
 }
