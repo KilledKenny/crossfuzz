@@ -46,12 +46,6 @@ func target(data []byte) ([]byte, error) {
 			case reflect.String:
 				return []byte("string"), nil
 			case reflect.Float64:
-				//i++
-				//if i%15 == 0 {
-				//	log.Println("i")
-				//	exerciseCoverage()
-				//	return target(data)
-				//}
 				return []byte("number"), nil
 			case reflect.Bool:
 				//Random guess
