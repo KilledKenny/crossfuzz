@@ -6,34 +6,27 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 # Build the coordinator binary
-go build ./cmd/crossfuzz/
+make bin/crossfuzz
 
-# Run all Go tests
-go test ./...
+# Run all tests (currently only Go tests)
+make test
 
-# Run tests for a specific package
-go test ./pkg/coverage/
-go test ./harness/gofuzz/
+# Run a single Go test package
+go test ./pkg/engine/...
+
+# Build Java & JS harnesses
+make harness
 
 # Build targets defined in a config
-./crossfuzz build examples/base64/crossfuzz.toml
+./bin/crossfuzz build crossfuzz.toml
 
 # Run a fuzzing campaign
-./crossfuzz run examples/base64/crossfuzz.toml
-
-# Build C harness target (must use clang with sanitizer coverage)
-clang -fsanitize-coverage=trace-pc-guard -o target target.c harness/c/crossfuzz.c
-
-# Build Go fuzz target (-coverpkg=all is required when target delegates into stdlib/third-party)
-go build -cover -covermode=atomic -coverpkg=all -o target ./cmd/target
-
-# Build Java harness
-cd harness/java && gradle build   # produces build/libs/crossfuzz.jar
+./bin/crossfuzz run crossfuzz.toml
 ```
 
 ## Architecture
 
-cross_fuzz is a coverage-guided **differential fuzzer**: it sends the same generated input to multiple implementations of the same function (across C, Go, Java, JS), collects coverage from all targets, merges it into a shared bitmap, and flags any divergence in outputs.
+cross_fuzz is a coverage-guided **differential fuzzer**: it sends the same generated input to multiple implementations of the same function (across C, C++, Go, Java, JS/TS), collects coverage from all targets, merges it into a shared bitmap, and flags any divergence in outputs.
 
 ### Data flow per iteration
 
@@ -60,10 +53,17 @@ cross_fuzz is a coverage-guided **differential fuzzer**: it sends the same gener
 
 Each language harness handles the pipe protocol, shared memory mapping, and coverage plumbing. Users only write the target function.
 
-- **C** (`harness/c/`): implements SanitizerCoverage callbacks; target must be compiled with `clang -fsanitize-coverage=trace-pc-guard`
-- **Go** (`harness/gofuzz/`): uses `runtime/coverage` APIs; binary must be built with `-cover -covermode=atomic`. The `covCollector` runs a warmup phase to mask flaky (non-deterministic) bitmap slots from GC/allocator instrumentation
-- **Java** (`harness/java/`): Gradle project; custom `CoverageAgent`/`CoverageTransformer` via Java instrumentation API; produces `crossfuzz.jar`
-- **JavaScript**: Istanbul-based AST instrumentation (not yet in repo, documented in ARCHITECTURE.md)
+- **C** (`harness/c/`): implements SanitizerCoverage callbacks; target must be compiled with `clang -fsanitize-coverage=trace-pc-guard -I ../../harness/c crossfuzz.c`
+- **C++** (`harness/cpp/`): thin wrapper over the C harness; must compile both `crossfuzz.c` (from `harness/c/`) and `crossfuzz.cpp` together with `-fsanitize-coverage=trace-pc-guard`
+- **Go** (`harness/gofuzz/`): uses `runtime/coverage` APIs; binary must be built with `-cover -covermode=atomic`. Use `-coverpkg` with an explicit package list (not just `./...`) to include stdlib/third-party packages the target delegates into — see examples for the `go list -deps` filter pattern. The `covCollector` runs a warmup phase to mask flaky bitmap slots from GC/allocator noise.
+- **Java** (`harness/java/`): Gradle project; custom `CoverageAgent`/`CoverageTransformer` via Java instrumentation API; produces `crossfuzz.jar`. Pass `-javaagent:crossfuzz.jar` at runtime.
+- **JavaScript/TypeScript** (`harness/js/`): runs under Bun. Istanbul-based AST instrumentation is applied via `bun run --preload ../../harness/js/instrument.ts`. The harness entry point is `crossfuzz.ts`; targets import `run` from it.
+
+All harnesses support a `DisableInstrumentation` setting (Go: `Settings{DisableInstrumentation: true}`, C++: `Settings{.disable_instrumentation=true}`, JS: `settings.disableInstrumentation`) for use when the harness is a thin HTTP trigger and coverage should come entirely from an instrumented server process.
+
+### Server targets
+
+Targets can be `type = "server"` in the TOML config for long-running server processes (e.g. HTTP servers). In this mode the coordinator does not use the pipe protocol with the target; instead a separate harness process (usually Go or JS) acts as the client, sends requests, and reports results. The Go harness provides `InitServer()`, `ClearCoverage()`, and `CollectCoverage()` APIs for server-side coverage collection in this setup.
 
 ### IPC layout
 
@@ -88,3 +88,7 @@ A 64 KB byte array of saturating counters following the AFL model. Counters are 
 ### Configuration
 
 TOML files with four sections: `[campaign]`, `[corpus]`, `[comparator]`, and one or more `[[target]]` entries. The `build_cmd` field in each target is run by `crossfuzz build`; it is separate from the `binary`/`args` used at runtime.
+
+Target `language` values: `"c"`, `"cpp"`, `"go"`, `"java"`, `"js"`. Target `type` values: `"harness"` (default, uses pipe protocol) or `"server"` (long-running process, no pipe).
+
+Comparator `type` values: `"byte_equal"`, `"json_structural"`, `"numeric"`, `"custom"` (requires `script`), `"none"`.
