@@ -43,10 +43,11 @@ function parseString(): void {
             (h >= 0x41 && h <= 0x46);   // A-F
           if (!isHex) throw new Error("bad hex digit");
         }
-      }
-      const codes = Array.from("\"\\/bfnrt", ch => ch.charCodeAt(0))
-      if (!codes.includes(esc)) {
-        throw new Error("invalid char in escape code");
+      } else {
+        const codes = Array.from("\"\\/bfnrt", ch => ch.charCodeAt(0))
+        if (!codes.includes(esc)) {
+          throw new Error("invalid char in escape code");
+        }
       }
       // other escapes accepted as-is
     } else if (c < 0x20) {
