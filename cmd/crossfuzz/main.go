@@ -120,6 +120,18 @@ func cmdRun(cfg *config.Config) {
 	switch cfg.Comparator.Type {
 	case "byte_equal", "":
 		comp = compare.ByteEqual{}
+	case "json_structural":
+		comp = compare.JSONStructural{}
+	case "numeric":
+		comp = compare.Numeric{}
+	case "numeric_relative":
+		comp = compare.Numeric{Relative: true}
+	case "custom":
+		if cfg.Comparator.Script == "" {
+			fmt.Fprintf(os.Stderr, "Comparator type 'custom' requires a script path\n")
+			os.Exit(1)
+		}
+		comp = compare.Custom{Script: cfg.Comparator.Script}
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown comparator type: %s\n", cfg.Comparator.Type)
 		os.Exit(1)

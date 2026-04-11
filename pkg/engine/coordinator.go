@@ -2,6 +2,8 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"os"
@@ -119,11 +121,16 @@ func (c *Coordinator) Run(ctx context.Context) error {
 		}
 
 		// Compare outputs across targets.
-		if disc := c.comparator.Compare(input, outputs); disc != nil && false {
+		if disc := c.comparator.Compare(input, outputs); disc != nil {
 			findings++
+			minimized, minDisc := Minimize(disc.Input, c.runners, c.comparator)
+			if minDisc != nil {
+				disc = minDisc
+			} else {
+				disc.Input = minimized
+			}
 			c.saveFinding(disc, findings)
-			fmt.Printf("\n[FINDING #%d] %s (input: %d bytes)\n", findings, disc.Description, len(input))
-			return nil
+			fmt.Printf("\n[FINDING #%d] %s (input: %d bytes)\n", findings, disc.Description, len(disc.Input))
 		}
 
 		c.stats.Update(c.corpus.Len(), coverage.CountBits(c.globalCov), findings)
@@ -148,11 +155,39 @@ func (c *Coordinator) executeAll(input []byte) (map[string][]byte, []byte, error
 }
 
 func (c *Coordinator) saveFinding(disc *compare.Discrepancy, id int) {
-	dir := filepath.Join(c.cfg.Corpus.FindingsDir, fmt.Sprintf("finding_%04d", id))
+	h := sha256.Sum256(disc.Input)
+	dirName := fmt.Sprintf("%x", h[:8])
+	dir := filepath.Join(c.cfg.Corpus.FindingsDir, dirName)
 	os.MkdirAll(dir, 0755)
+
 	os.WriteFile(filepath.Join(dir, "input.bin"), disc.Input, 0644)
 	for name, output := range disc.Outputs {
 		os.WriteFile(filepath.Join(dir, fmt.Sprintf("output_%s.bin", name)), output, 0644)
 	}
-	os.WriteFile(filepath.Join(dir, "description.txt"), []byte(disc.Description), 0644)
+
+	type metadata struct {
+		ID          int               `json:"id"`
+		Hash        string            `json:"hash"`
+		Comparator  string            `json:"comparator"`
+		Description string            `json:"description"`
+		InputLen    int               `json:"input_len"`
+		OutputLens  map[string]int    `json:"output_lens"`
+		Timestamp   string            `json:"timestamp"`
+	}
+	lens := make(map[string]int, len(disc.Outputs))
+	for name, out := range disc.Outputs {
+		lens[name] = len(out)
+	}
+	meta := metadata{
+		ID:          id,
+		Hash:        fmt.Sprintf("%x", h),
+		Comparator:  disc.Comparator,
+		Description: disc.Description,
+		InputLen:    len(disc.Input),
+		OutputLens:  lens,
+		Timestamp:   time.Now().UTC().Format(time.RFC3339),
+	}
+	if data, err := json.MarshalIndent(meta, "", "  "); err == nil {
+		os.WriteFile(filepath.Join(dir, "metadata.json"), data, 0644)
+	}
 }
