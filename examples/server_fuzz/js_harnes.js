@@ -77,6 +77,14 @@ async function main(input) {
     console.error("Request failed:", error.message);
   }
 }
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** FUZZING INSTRUMETATION DISABLE COMPLETELY - this application is just a harnes to trigger behavior in the servers it should report the same null metrics each time*/
-run(main);
+async function main() {
+  //Sleep 1 sec to give the servers a chans to start before we connect to the fuzzer
+  await sleep(1000);
+
+  /** FUZZING INSTRUMETATION DISABLE COMPLETELY - this application is just a harnes to trigger behavior in the servers it should report the same null metrics each time*/ 
+  run(harnes);
+}
+
+main()
