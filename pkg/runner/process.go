@@ -136,7 +136,9 @@ func (p *Process) Execute(input []byte) ([]byte, []byte, error) {
 // Stop terminates the target process and cleans up.
 func (p *Process) Stop() error {
 	if p.cmdW != nil {
-		protocol.Encode(p.cmdW, &protocol.Message{Type: protocol.TypeShutdown})
+		if err := protocol.Encode(p.cmdW, &protocol.Message{Type: protocol.TypeShutdown}); err != nil {
+			fmt.Fprintf(os.Stderr, "crossfuzz: send shutdown to %s: %v\n", p.name, err)
+		}
 		p.cmdW.Close()
 		p.cmdW = nil
 	}

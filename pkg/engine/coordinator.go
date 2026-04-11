@@ -158,7 +158,9 @@ func (c *Coordinator) Run(ctx context.Context) error {
 	if err := c.corpus.Load(); err != nil {
 		return fmt.Errorf("load corpus: %w", err)
 	}
-	os.MkdirAll(c.cfg.Corpus.FindingsDir, 0755)
+	if err := os.MkdirAll(c.cfg.Corpus.FindingsDir, 0755); err != nil {
+		return fmt.Errorf("create findings dir: %w", err)
+	}
 
 	if c.corpus.Len() == 0 {
 		c.corpus.Add([]byte(""))
@@ -229,7 +231,9 @@ func (c *Coordinator) Run(ctx context.Context) error {
 			if stable {
 				coverage.Merge(c.globalCov, combinedCov)
 				if c.corpus.Add(input) {
-					c.corpus.Save(input)
+					if err := c.corpus.Save(input); err != nil {
+						fmt.Printf("\n[WARN] failed to save corpus entry: %v\n", err)
+					}
 				}
 			}
 		}
@@ -248,7 +252,9 @@ func (c *Coordinator) Run(ctx context.Context) error {
 			} else {
 				disc.Input = minimized
 			}
-			c.saveFinding(disc, findings)
+			if err := c.saveFinding(disc, findings); err != nil {
+				fmt.Printf("\n[WARN] failed to save finding #%d: %v\n", findings, err)
+			}
 			fmt.Printf("\n[FINDING #%d] %s (input: %d bytes)\n", findings, disc.Description, len(disc.Input))
 			if c.maxFindings > 0 && findings >= c.maxFindings {
 				fmt.Printf("\nMax findings (%d) reached. Stopping.\n", c.maxFindings)
@@ -301,7 +307,10 @@ func (c *Coordinator) executeAll(input []byte) (map[string][]byte, map[string][]
 
 	// Read coverage accumulated by server targets while the harness ran.
 	for _, s := range c.serverRunners {
-		_, cov, _ := s.Execute(input)
+		_, cov, err := s.Execute(input)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("server target %s: %w", s.Name(), err)
+		}
 		perTargetCov[s.Name()] = cov
 		coverage.Merge(combined, cov)
 	}
@@ -309,15 +318,22 @@ func (c *Coordinator) executeAll(input []byte) (map[string][]byte, map[string][]
 	return outputs, perTargetCov, combined, nil
 }
 
-func (c *Coordinator) saveFinding(disc *compare.Discrepancy, id int) {
+func (c *Coordinator) saveFinding(disc *compare.Discrepancy, id int) error {
 	h := sha256.Sum256(disc.Input)
 	dirName := fmt.Sprintf("%x", h[:8])
 	dir := filepath.Join(c.cfg.Corpus.FindingsDir, dirName)
-	os.MkdirAll(dir, 0755)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create finding dir %s: %w", dir, err)
+	}
 
-	os.WriteFile(filepath.Join(dir, "input.bin"), disc.Input, 0644)
+	if err := os.WriteFile(filepath.Join(dir, "input.bin"), disc.Input, 0644); err != nil {
+		return fmt.Errorf("write input.bin: %w", err)
+	}
 	for name, output := range disc.Outputs {
-		os.WriteFile(filepath.Join(dir, fmt.Sprintf("output_%s.bin", name)), output, 0644)
+		path := filepath.Join(dir, fmt.Sprintf("output_%s.bin", name))
+		if err := os.WriteFile(path, output, 0644); err != nil {
+			return fmt.Errorf("write output for %s: %w", name, err)
+		}
 	}
 
 	type metadata struct {
@@ -342,7 +358,12 @@ func (c *Coordinator) saveFinding(disc *compare.Discrepancy, id int) {
 		OutputLens:  lens,
 		Timestamp:   time.Now().UTC().Format(time.RFC3339),
 	}
-	if data, err := json.MarshalIndent(meta, "", "  "); err == nil {
-		os.WriteFile(filepath.Join(dir, "metadata.json"), data, 0644)
+	data, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, "metadata.json"), data, 0644); err != nil {
+		return fmt.Errorf("write metadata.json: %w", err)
+	}
+	return nil
 }

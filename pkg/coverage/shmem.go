@@ -138,6 +138,7 @@ func (s *SharedMem) WriteOutput(data []byte) {
 func (s *SharedMem) ReadOutput() []byte {
 	n := int(s.OutputLen())
 	if n > OutputRegionSize {
+		fmt.Fprintf(os.Stderr, "crossfuzz: output length %d exceeds region size %d, truncating\n", n, OutputRegionSize)
 		n = OutputRegionSize
 	}
 	out := make([]byte, n)

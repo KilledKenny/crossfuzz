@@ -71,7 +71,9 @@ func (c *Corpus) Save(input []byte) error {
 	if c.cacheDir == "" {
 		return nil
 	}
-	os.MkdirAll(c.cacheDir, 0755)
+	if err := os.MkdirAll(c.cacheDir, 0755); err != nil {
+		return fmt.Errorf("create cache dir: %w", err)
+	}
 	h := sha256.Sum256(input)
 	name := fmt.Sprintf("%x", h[:8])
 	return os.WriteFile(filepath.Join(c.cacheDir, name), input, 0644)
