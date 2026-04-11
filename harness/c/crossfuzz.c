@@ -137,6 +137,11 @@ static int msg_is_type(const char *json, const char *type_val)
 
 int crossfuzz_run(void)
 {
+    return crossfuzz_run_ex(NULL);
+}
+
+int crossfuzz_run_ex(const crossfuzz_settings_t *settings)
+{
     const char *shm_path = getenv("CROSSFUZZ_SHM");
     if (!shm_path) {
         fprintf(stderr, "crossfuzz: CROSSFUZZ_SHM not set\n");
@@ -155,7 +160,11 @@ int crossfuzz_run(void)
         perror("crossfuzz: mmap");
         return 1;
     }
-    cov_bitmap = shm_base + COVERAGE_OFFSET;
+
+    /* When instrumentation is disabled, leave cov_bitmap NULL so that the
+     * __sanitizer_cov_trace_pc_guard callback becomes a no-op. */
+    if (!settings || !settings->disable_instrumentation)
+        cov_bitmap = shm_base + COVERAGE_OFFSET;
 
     /* Handshake: tell coordinator we're ready. */
     if (proto_write(RESP_FD, "{\"type\":\"ready\"}") < 0) {

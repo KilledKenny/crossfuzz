@@ -14,6 +14,15 @@ namespace detail {
 extern FuzzFn g_fuzz_fn;
 } // namespace detail
 
+struct Settings {
+    /**
+     * When true, coverage data is not written to the shared memory bitmap.
+     * Use this when the harness is only a trigger and coverage should come
+     * entirely from instrumented server targets.
+     */
+    bool disable_instrumentation = false;
+};
+
 /*
  * Run the fuzzing harness loop. Call from main().
  *
@@ -21,9 +30,9 @@ extern FuzzFn g_fuzz_fn;
  * Throw any exception to signal an error for the current iteration;
  * the harness will report it as a non-zero status and continue.
  *
- * Internally delegates to the C harness crossfuzz_run(); compile with
+ * Internally delegates to the C harness crossfuzz_run_ex(); compile with
  * both crossfuzz.c and crossfuzz.cpp from harness/cpp/.
  */
-int run(FuzzFn fn);
+int run(FuzzFn fn, Settings settings = {});
 
 } // namespace crossfuzz

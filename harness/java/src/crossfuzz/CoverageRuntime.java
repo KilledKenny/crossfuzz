@@ -9,6 +9,11 @@ public class CoverageRuntime {
         bitmap = b;
     }
 
+    /** Disables coverage collection by discarding the bitmap reference. */
+    static void disable() {
+        bitmap = null;
+    }
+
     public static void hit(int index) {
         ByteBuffer b = bitmap;
         if (b == null) return;

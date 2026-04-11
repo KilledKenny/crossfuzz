@@ -29,9 +29,23 @@ import (
 // TargetFunc is the signature for a Go fuzz target.
 type TargetFunc func(data []byte) ([]byte, error)
 
+// Settings configures optional harness behaviour.
+type Settings struct {
+	// DisableInstrumentation prevents coverage data from being written to the
+	// shared memory bitmap after each iteration. Use this when the harness is
+	// only a trigger and coverage should come entirely from instrumented server
+	// targets.
+	DisableInstrumentation bool
+}
+
 // Run enters the persistent-mode harness loop.
 // It reads inputs from shared memory, calls target, and writes outputs back.
-func Run(target TargetFunc) {
+// An optional Settings value may be passed as the second argument.
+func Run(target TargetFunc, opts ...Settings) {
+	var settings Settings
+	if len(opts) > 0 {
+		settings = opts[0]
+	}
 	shmPath := os.Getenv("CROSSFUZZ_SHM")
 	if shmPath == "" {
 		fmt.Fprintf(os.Stderr, "crossfuzz: CROSSFUZZ_SHM not set\n")
@@ -91,7 +105,7 @@ func Run(target TargetFunc) {
 
 			output, targetErr := target(input)
 
-			if collector.enabled {
+			if collector.enabled && !settings.DisableInstrumentation {
 				if err := collector.snapshot(); err != nil {
 					collector.enabled = false
 					fmt.Fprintf(os.Stderr, "crossfuzz: coverage disabled: %v\n", err)

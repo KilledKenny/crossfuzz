@@ -29,7 +29,21 @@ public class Harness {
     static final int MAX_OUTPUT = 1_048_576;
     static final int MAX_MSG    = 1 << 20;
 
+    /** Configures optional harness behaviour. */
+    public static class Settings {
+        /**
+         * When true, coverage data is not written to the shared memory bitmap.
+         * Use this when the harness is only a trigger and coverage should come
+         * entirely from instrumented server targets.
+         */
+        public boolean disableInstrumentation = false;
+    }
+
     public static void run(Target target) throws Exception {
+        run(target, new Settings());
+    }
+
+    public static void run(Target target, Settings settings) throws Exception {
         String shmPath = System.getenv("CROSSFUZZ_SHM");
         if (shmPath == null) {
             throw new RuntimeException("CROSSFUZZ_SHM not set");
@@ -50,6 +64,9 @@ public class Harness {
         // Re-initialize with the Harness mapping (agent may have already done this;
         // both mappings point to the same physical pages so either works).
         CoverageRuntime.init(covSlice.slice());
+        if (settings.disableInstrumentation) {
+            CoverageRuntime.disable();
+        }
 
         // Open inherited pipe FDs
         FileInputStream  cmdIn  = new FileInputStream("/proc/self/fd/3");

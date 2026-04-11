@@ -11,10 +11,12 @@ namespace detail {
 FuzzFn g_fuzz_fn;
 } // namespace detail
 
-int run(FuzzFn fn)
+int run(FuzzFn fn, Settings settings)
 {
     detail::g_fuzz_fn = std::move(fn);
-    return crossfuzz_run();
+    crossfuzz_settings_t c_settings{};
+    c_settings.disable_instrumentation = settings.disable_instrumentation ? 1 : 0;
+    return crossfuzz_run_ex(&c_settings);
 }
 
 } // namespace crossfuzz
