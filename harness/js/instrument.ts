@@ -4,16 +4,14 @@
  * Load this before the target to enable coverage-guided fuzzing:
  *   bun run --preload ../../harness/js/instrument.ts ./target.ts
  *
- * The plugin intercepts .ts module loads (excluding node_modules and the
- * harness itself), transpiles them to JS via Bun.Transpiler, then instruments
+ * The plugin intercepts .ts and .js module loads (excluding node_modules and
+ * the harness itself), transpiles .ts to JS via Bun.Transpiler, then instruments
  * with istanbul-lib-instrument. The resulting __coverage__ global is read by
  * crossfuzz.ts after each target execution.
  *
- * NOTE: The filter is intentionally restricted to .tsx? (TypeScript only).
- * istanbul-lib-instrument uses @babel/core internally, which synchronously
- * require()s .js helper packages. If the plugin intercepted .js files too,
- * those require() calls would trigger our onLoad handler and Bun would throw
- * "onLoad() expects an object returned" because we'd return undefined for them.
+ * NOTE: We must never return undefined from a matched onLoad handler — Bun 1.3.8
+ * throws "onLoad() expects an object returned" in that case. For node_modules and
+ * harness files we return the source unchanged so Bun still gets a valid object.
  */
 
 import { plugin } from "bun";
@@ -29,19 +27,24 @@ const instrumenter = createInstrumenter({
 plugin({
   name: "crossfuzz-istanbul",
   setup(build) {
-    // Only match TypeScript source files. .js files (including all of
-    // @babel/core's internal helpers) are left to Bun's default loader.
-    build.onLoad({ filter: /\.tsx?$/ }, async ({ path }) => {
+    // Exclude node_modules via a negative lookahead so Bun never calls this
+    // handler for @babel/core's CJS helpers. If it did, we'd return them with
+    // loader:"js" (ESM), and @babel/core's synchronous require() of those
+    // modules would fail with "require() async module is unsupported".
+    build.onLoad({ filter: /^(?!.*\/node_modules\/).*\.[jt]sx?$/ }, async ({ path }) => {
       const source = await Bun.file(path).text();
 
-      // Transpile TypeScript → JavaScript before Istanbul sees it.
-      const transpiler = new Bun.Transpiler({ loader: "ts" });
-      const js = transpiler.transformSync(source);
+      // Transpile .ts/.tsx → JavaScript; leave .js/.jsx as-is.
+      let js: string;
+      if (path.endsWith(".ts") || path.endsWith(".tsx")) {
+        const transpiler = new Bun.Transpiler({ loader: "ts" });
+        js = transpiler.transformSync(source);
+      } else {
+        js = source;
+      }
 
-      // Don't instrument the harness or any dependencies — only user target code.
-      // We must still return an object (never undefined) for every matched path;
-      // returning undefined causes Bun 1.3.8 to throw "onLoad() expects an object".
-      if (path.includes("/node_modules/") || path.includes("/harness/js/")) {
+      // Don't instrument the harness itself — only user target code.
+      if (path.includes("/harness/js/")) {
         return { contents: js, loader: "js" };
       }
 

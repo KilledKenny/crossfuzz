@@ -9,31 +9,38 @@ seed_dir = "./seeds"
 cache_dir = "./cache"
 findings_dir = "./findings"
 
-## Temprary disable c and c++ due to linking issues when in a nix shell
-#[[target]]
-#name = "c_base64"
-#language = "c"
-#binary = "./c_target"
-#build_cmd = "clang-19 -fsanitize-coverage=trace-pc-guard -O2 -I ../../harness/c -o c_target c_target.c ../../harness/c/crossfuzz.c"
-#
-#[[target]]
-#name = "cpp_base64"
-#language = "cpp"
-#binary = "./cpp_target"
-#build_cmd = "clang-19 -fsanitize-coverage=trace-pc-guard -O2 -c ../../harness/c/crossfuzz.c -o crossfuzz_c.o && clang++-19 -std=c++23 -fsanitize-coverage=trace-pc-guard -O2 -I ../../harness/c -o cpp_target cpp_target.cpp ../../harness/cpp/crossfuzz.cpp crossfuzz_c.o && rm crossfuzz_c.o"
+# Temprary disable c and c++ due to linking issues when in a nix shell
+[[target]]
+name = "c_base64"
+language = "c"
+binary = "./c_target"
+build_cmd = "clang-19 -fsanitize-coverage=trace-pc-guard -O2 -I ../../harness/c -o c_target c_target.c ../../harness/c/crossfuzz.c"
 
-#[[target]]
-#name = "go_base64"
-#language = "go"
-#binary = "./go_target_bin"
-#build_cmd = "cd go_target && PKGS=$(go list -deps . | grep -vE '^(runtime$|runtime/.*|sync$|sync/.*|internal/.*|reflect$|syscall$|os$|os/.*)' | paste -sd,) && go build -cover -covermode=atomic -coverpkg=\"$PKGS\" -o ../go_target_bin ."
+[[target]]
+name = "cpp_base64"
+language = "cpp"
+binary = "./cpp_target"
+build_cmd = "clang-19 -fsanitize-coverage=trace-pc-guard -O2 -c ../../harness/c/crossfuzz.c -o crossfuzz_c.o && clang++-19 -std=c++23 -fsanitize-coverage=trace-pc-guard -O2 -I ../../harness/c -o cpp_target cpp_target.cpp ../../harness/cpp/crossfuzz.cpp crossfuzz_c.o && rm crossfuzz_c.o"
 
-#[[target]]
-#name = "ts_base64"
-#language = "js"
-#binary = "bun"
-#args = ["run", "--preload", "../../harness/js/instrument.ts", "./target_ts.ts"]
-#build_cmd = "cd ../../harness/js && bun install"
+[[target]]
+name = "go_base64"
+language = "go"
+binary = "./go_target_bin"
+build_cmd = "cd go_target && PKGS=$(go list -deps . | grep -vE '^(runtime$|runtime/.*|sync$|sync/.*|internal/.*|reflect$|syscall$|os$|os/.*)' | paste -sd,) && go build -cover -covermode=atomic -coverpkg=\"$PKGS\" -o ../go_target_bin ."
+
+[[target]]
+name = "js_base64"
+language = "js"
+binary = "bun"
+args = ["run", "--preload", "../../harness/js/instrument.ts", "./target_js.js"]
+build_cmd = "cd ../../harness/js && bun install"
+
+[[target]]
+name = "ts_base64"
+language = "js"
+binary = "bun"
+args = ["run", "--preload", "../../harness/js/instrument.ts", "./target_ts.ts"]
+build_cmd = "cd ../../harness/js && bun install"
 
 [comparator]
 type = "byte_equal"

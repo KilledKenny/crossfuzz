@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 
 	"crossfuzz/pkg/compare"
 	"crossfuzz/pkg/config"
@@ -13,12 +15,28 @@ import (
 	"crossfuzz/pkg/runner"
 )
 
+func usage() {
+	fmt.Fprintf(os.Stderr, "Usage: crossfuzz <command> <config.toml> [flags]\n")
+	fmt.Fprintf(os.Stderr, "Commands:\n")
+	fmt.Fprintf(os.Stderr, "  build   Build all targets\n")
+	fmt.Fprintf(os.Stderr, "  run     Run differential fuzzing campaign\n")
+	fmt.Fprintf(os.Stderr, "Flags:\n")
+	fmt.Fprintf(os.Stderr, "  --name=fuzz1,fuzz2   Comma-separated list of target names to build/run (default: all)\n")
+}
+
 func main() {
 	if len(os.Args) < 3 {
-		fmt.Fprintf(os.Stderr, "Usage: crossfuzz <command> <config.toml>\n")
-		fmt.Fprintf(os.Stderr, "Commands:\n")
-		fmt.Fprintf(os.Stderr, "  build   Build all targets\n")
-		fmt.Fprintf(os.Stderr, "  run     Run differential fuzzing campaign\n")
+		usage()
+		os.Exit(1)
+	}
+
+	command := os.Args[1]
+	fs := flag.NewFlagSet(command, flag.ExitOnError)
+	nameFlag := fs.String("name", "", "Comma-separated list of target names to build/run (default: all)")
+	fs.Usage = usage
+
+	// os.Args[2] is the config file; flags follow after
+	if err := fs.Parse(os.Args[3:]); err != nil {
 		os.Exit(1)
 	}
 
@@ -28,15 +46,39 @@ func main() {
 		os.Exit(1)
 	}
 
-	switch os.Args[1] {
+	if *nameFlag != "" {
+		cfg.Targets = filterTargets(cfg.Targets, *nameFlag)
+		if len(cfg.Targets) == 0 {
+			fmt.Fprintf(os.Stderr, "No targets matched --name=%s\n", *nameFlag)
+			os.Exit(1)
+		}
+	}
+
+	switch command {
 	case "build":
 		cmdBuild(cfg)
 	case "run":
 		cmdRun(cfg)
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", os.Args[1])
+		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		os.Exit(1)
 	}
+}
+
+func filterTargets(targets []config.TargetConfig, nameList string) []config.TargetConfig {
+	names := make(map[string]bool)
+	for _, n := range strings.Split(nameList, ",") {
+		if t := strings.TrimSpace(n); t != "" {
+			names[t] = true
+		}
+	}
+	var filtered []config.TargetConfig
+	for _, tc := range targets {
+		if names[tc.Name] {
+			filtered = append(filtered, tc)
+		}
+	}
+	return filtered
 }
 
 func cmdBuild(cfg *config.Config) {
