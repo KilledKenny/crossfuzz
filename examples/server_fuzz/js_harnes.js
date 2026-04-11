@@ -59,7 +59,7 @@ export function fuzzToFetchHeaders(uint8) {
   };
 }
 
-async function main(input) {
+async function harnes(input) {
   headers = fuzzToFetchHeaders(input)
   try {
     const response = await fetch(url,{headers:headers});

@@ -45,6 +45,14 @@ func (ByteEqual) Compare(input []byte, outputs map[string][]byte) *Discrepancy {
 	return nil
 }
 
+// NoOp is a comparator that never reports a discrepancy.
+// Used in server fuzz mode where there is only one harness target and
+// output comparison is not meaningful.
+type NoOp struct{}
+
+func (NoOp) Name() string                                         { return "none" }
+func (NoOp) Compare(_ []byte, _ map[string][]byte) *Discrepancy   { return nil }
+
 func copyOutputs(m map[string][]byte) map[string][]byte {
 	out := make(map[string][]byte, len(m))
 	for k, v := range m {

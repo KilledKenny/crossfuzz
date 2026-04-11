@@ -23,7 +23,8 @@ import (
 // Coordinator drives the fuzzing campaign.
 type Coordinator struct {
 	cfg            *config.Config
-	runners        []runner.Runner
+	runners        []runner.Runner          // harness runners: drive each iteration via pipes
+	serverRunners  []*runner.ServerProcess  // server runners: coverage-only, no pipes
 	corpus         *Corpus
 	mutator        *Mutator
 	comparator     compare.Comparator
@@ -37,18 +38,20 @@ type Coordinator struct {
 }
 
 // NewCoordinator creates a coordinator for the given config and runners.
-func NewCoordinator(cfg *config.Config, runners []runner.Runner, comp compare.Comparator) *Coordinator {
+// harnessRunners speak the pipe protocol; serverRunners contribute coverage only.
+func NewCoordinator(cfg *config.Config, harnessRunners []runner.Runner, serverRunners []*runner.ServerProcess, comp compare.Comparator) *Coordinator {
 	seed := time.Now().UnixNano()
 	return &Coordinator{
-		cfg:         cfg,
-		runners:     runners,
-		corpus:      NewCorpus(cfg.Corpus.SeedDir, cfg.Corpus.CacheDir),
-		mutator:     NewMutator(seed, cfg.Campaign.MaxInputSize),
-		comparator:  comp,
-		stats:       NewStats(),
-		globalCov:   make([]byte, coverage.BitmapSize),
-		rng:         rand.New(rand.NewSource(seed + 1)),
-		findingCovs: make(map[[32]byte]bool),
+		cfg:           cfg,
+		runners:       harnessRunners,
+		serverRunners: serverRunners,
+		corpus:        NewCorpus(cfg.Corpus.SeedDir, cfg.Corpus.CacheDir),
+		mutator:       NewMutator(seed, cfg.Campaign.MaxInputSize),
+		comparator:    comp,
+		stats:         NewStats(),
+		globalCov:     make([]byte, coverage.BitmapSize),
+		rng:           rand.New(rand.NewSource(seed + 1)),
+		findingCovs:   make(map[[32]byte]bool),
 	}
 }
 
@@ -154,8 +157,8 @@ func (c *Coordinator) Run(ctx context.Context) error {
 		c.corpus.Add([]byte(""))
 	}
 
-	fmt.Printf("Starting campaign %q with %d targets, %d seed inputs\n",
-		c.cfg.Campaign.Name, len(c.runners), c.corpus.Len())
+	fmt.Printf("Starting campaign %q with %d harness + %d server targets, %d seed inputs\n",
+		c.cfg.Campaign.Name, len(c.runners), len(c.serverRunners), c.corpus.Len())
 
 	if c.warmupRounds > 0 {
 		if err := c.Warmup(ctx, c.warmupRounds); err != nil {
@@ -251,9 +254,18 @@ func (c *Coordinator) Run(ctx context.Context) error {
 	}
 }
 
-// executeAll runs input through every configured target and returns
-// their outputs plus the merged raw (un-bucketized) coverage bitmap.
+// executeAll runs input through all harness targets and collects coverage
+// from server targets. Returns outputs from harness runners plus the merged
+// raw (un-bucketized) coverage bitmap from all targets.
 func (c *Coordinator) executeAll(input []byte) (map[string][]byte, []byte, error) {
+	// Reset server coverage bitmaps before the harness runs so we only
+	// capture edges from this iteration. Harness runners reset themselves
+	// inside Execute().
+	for _, s := range c.serverRunners {
+		s.ResetCoverage()
+	}
+
+	// Execute harness runners via the pipe protocol.
 	outputs := make(map[string][]byte, len(c.runners))
 	combined := make([]byte, coverage.BitmapSize)
 	for _, r := range c.runners {
@@ -264,6 +276,13 @@ func (c *Coordinator) executeAll(input []byte) (map[string][]byte, []byte, error
 		outputs[r.Name()] = output
 		coverage.Merge(combined, cov)
 	}
+
+	// Read coverage accumulated by server targets while the harness ran.
+	for _, s := range c.serverRunners {
+		_, cov, _ := s.Execute(input)
+		coverage.Merge(combined, cov)
+	}
+
 	return outputs, combined, nil
 }
 

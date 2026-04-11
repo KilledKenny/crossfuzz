@@ -140,23 +140,49 @@ func cmdBuild(cfg *config.Config) {
 	fmt.Println("Build complete.")
 }
 
-func buildRunners(cfg *config.Config) []runner.Runner {
-	var runners []runner.Runner
+func buildRunners(cfg *config.Config) ([]runner.Runner, []*runner.ServerProcess) {
+	var harness []runner.Runner
+	var servers []*runner.ServerProcess
 	for _, tc := range cfg.Targets {
-		r, err := runner.NewProcess(runner.ProcessConfig{
-			Name:    tc.Name,
-			Binary:  tc.Binary,
-			Args:    tc.Args,
-			Env:     tc.Env,
-			Timeout: cfg.Campaign.ExecTimeout.Duration,
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating runner %s: %v\n", tc.Name, err)
-			os.Exit(1)
+		if tc.IsServer() {
+			r, err := runner.NewServerProcess(runner.ProcessConfig{
+				Name:   tc.Name,
+				Binary: tc.Binary,
+				Args:   tc.Args,
+				Env:    tc.Env,
+			})
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error creating server runner %s: %v\n", tc.Name, err)
+				os.Exit(1)
+			}
+			servers = append(servers, r)
+		} else {
+			r, err := runner.NewProcess(runner.ProcessConfig{
+				Name:    tc.Name,
+				Binary:  tc.Binary,
+				Args:    tc.Args,
+				Env:     tc.Env,
+				Timeout: cfg.Campaign.ExecTimeout.Duration,
+			})
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error creating runner %s: %v\n", tc.Name, err)
+				os.Exit(1)
+			}
+			harness = append(harness, r)
 		}
-		runners = append(runners, r)
 	}
-	return runners
+	return harness, servers
+}
+
+// allRunners combines harness and server runners into a single slice for
+// use with startRunners/stopRunners, which only need the Runner interface.
+func allRunners(harness []runner.Runner, servers []*runner.ServerProcess) []runner.Runner {
+	all := make([]runner.Runner, len(harness), len(harness)+len(servers))
+	copy(all, harness)
+	for _, s := range servers {
+		all = append(all, s)
+	}
+	return all
 }
 
 func startRunners(runners []runner.Runner) {
@@ -179,7 +205,7 @@ func stopRunners(runners []runner.Runner) {
 }
 
 func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int) {
-	runners := buildRunners(cfg)
+	harness, servers := buildRunners(cfg)
 
 	var comp compare.Comparator
 	switch cfg.Comparator.Type {
@@ -191,6 +217,8 @@ func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int) {
 		comp = compare.Numeric{}
 	case "numeric_relative":
 		comp = compare.Numeric{Relative: true}
+	case "none":
+		comp = compare.NoOp{}
 	case "custom":
 		if cfg.Comparator.Script == "" {
 			fmt.Fprintf(os.Stderr, "Comparator type 'custom' requires a script path\n")
@@ -202,13 +230,14 @@ func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int) {
 		os.Exit(1)
 	}
 
-	startRunners(runners)
-	defer stopRunners(runners)
+	all := allRunners(harness, servers)
+	startRunners(all)
+	defer stopRunners(all)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	coord := engine.NewCoordinator(cfg, runners, comp)
+	coord := engine.NewCoordinator(cfg, harness, servers, comp)
 	coord.SetWarmupRounds(warmup)
 	coord.SetValidateRounds(validate)
 	coord.SetMaxFindings(maxFindings)
@@ -219,9 +248,11 @@ func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int) {
 }
 
 func cmdReduce(cfg *config.Config, outDir string, validate int) {
-	runners := buildRunners(cfg)
-	startRunners(runners)
-	defer stopRunners(runners)
+	harness, servers := buildRunners(cfg)
+	all := allRunners(harness, servers)
+	startRunners(all)
+	defer stopRunners(all)
+	runners := all
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()

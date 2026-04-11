@@ -39,7 +39,11 @@ type TargetConfig struct {
 	Args     []string `toml:"args"`
 	BuildCmd string   `toml:"build_cmd"`
 	Env      []string `toml:"env"`
+	Type     string   `toml:"type"` // "harness" (default) | "server"
 }
+
+// IsServer reports whether this target is a long-running server (no pipe protocol).
+func (t *TargetConfig) IsServer() bool { return t.Type == "server" }
 
 // ComparatorConfig selects the output comparison strategy.
 type ComparatorConfig struct {
@@ -77,5 +81,28 @@ func Load(path string) (*Config, error) {
 	if cfg.Campaign.Timeout.Duration == 0 {
 		cfg.Campaign.Timeout.Duration = time.Hour
 	}
+	if err := ValidateServerFuzzConfig(&cfg); err != nil {
+		return nil, err
+	}
 	return &cfg, nil
+}
+
+// ValidateServerFuzzConfig checks that server fuzz configs have exactly one harness target.
+// All-harness configs (no server targets) are always valid.
+func ValidateServerFuzzConfig(cfg *Config) error {
+	harness, server := 0, 0
+	for _, t := range cfg.Targets {
+		switch t.Type {
+		case "", "harness":
+			harness++
+		case "server":
+			server++
+		default:
+			return fmt.Errorf("target %q: unknown type %q (want \"harness\" or \"server\")", t.Name, t.Type)
+		}
+	}
+	if server > 0 && harness != 1 {
+		return fmt.Errorf("server fuzz mode requires exactly one harness target, got %d", harness)
+	}
+	return nil
 }

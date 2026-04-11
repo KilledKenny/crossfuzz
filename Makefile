@@ -1,9 +1,13 @@
 
 GO_CLI_INPUTS=$(shell go list -deps -f '{{range .GoFiles}}{{$$.Dir}}/{{.}}{{"\n"}}{{end}}' ./cmd/crossfuzz/ )
 
+bin/:
+	mkdir $@
+	touch $@
+
 ALL_TARGET=bin/crossfuzz
-bin/crossfuzz: $(GO_CLI_INPUTS)
-	go build  -o crossfuzz ./cmd/crossfuzz
+bin/crossfuzz: bin/ $(GO_CLI_INPUTS)
+	go build  -o $@ ./cmd/crossfuzz
 
 
 JAVA_HARNES_INPUT=$(find harness/java/src/ -name "*.java")
@@ -30,4 +34,4 @@ harness: $(HARNESS_TARGET)
 
 .DEFAULT_GOAL := all
 .PHONY: all
-ALL: $(ALL_TARGET)
+all: $(ALL_TARGET)

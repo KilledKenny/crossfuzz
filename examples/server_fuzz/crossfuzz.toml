@@ -27,7 +27,7 @@ build_cmd = "cd go_ingress && PKGS=$(go list -deps . | grep -vE '^(runtime$|runt
 name = "js_harnes"
 language = "js"
 binary = "bun"
-type = "harnes"
+type = "harness"
 args = ["run", "--preload", "../../harness/js/instrument.ts", "./js_harnes.js"]
 build_cmd = "cd ../../harness/js && bun install"
 

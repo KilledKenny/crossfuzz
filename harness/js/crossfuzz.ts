@@ -25,7 +25,7 @@ const MAX_OUTPUT      = 1_048_576;
 const STATUS_OK    = 0;
 const STATUS_ERROR = 1;
 
-export type TargetFn = (input: Uint8Array) => Uint8Array | Buffer;
+export type TargetFn = (input: Uint8Array) => Uint8Array | Buffer | Promise<Uint8Array> | Promise<Buffer>;
 
 // ---- shared memory helpers ----
 
@@ -144,7 +144,7 @@ function collectCoverage(bitmap: Uint8Array): void {
 
 // ---- main harness entry point ----
 
-export function run(target: TargetFn): void {
+export async function run(target: TargetFn): Promise<void> {
   const shmPath = process.env.CROSSFUZZ_SHM;
   if (!shmPath) {
     process.stderr.write("crossfuzz: CROSSFUZZ_SHM not set\n");
@@ -179,7 +179,7 @@ export function run(target: TargetFn): void {
       let output: Uint8Array | Buffer;
       let status = STATUS_OK;
       try {
-        output = target(input);
+        output = await target(input);
         if (!output) output = new Uint8Array(0);
       } catch {
         output = new Uint8Array(0);
