@@ -30,6 +30,7 @@ type Coordinator struct {
 	comparator     compare.Comparator
 	stats          *Stats
 	globalCov      []byte
+	perTargetCov   map[string][]byte
 	rng            *rand.Rand
 	warmupRounds   int
 	validateRounds int
@@ -49,8 +50,9 @@ func NewCoordinator(cfg *config.Config, harnessRunners []runner.Runner, serverRu
 		mutator:       NewMutator(seed, cfg.Campaign.MaxInputSize),
 		comparator:    comp,
 		stats:         NewStats(),
-		globalCov:     make([]byte, coverage.BitmapSize),
-		rng:           rand.New(rand.NewSource(seed + 1)),
+		globalCov:    make([]byte, coverage.BitmapSize),
+		perTargetCov: make(map[string][]byte),
+		rng:          rand.New(rand.NewSource(seed + 1)),
 		findingCovs:   make(map[[32]byte]bool),
 	}
 }
@@ -254,9 +256,18 @@ func (c *Coordinator) Run(ctx context.Context) error {
 			}
 		}
 
-		targetEdges := make(map[string]int, len(perTargetCov))
 		for name, cov := range perTargetCov {
-			targetEdges[name] = coverage.CountBits(cov)
+			if acc, ok := c.perTargetCov[name]; ok {
+				coverage.Merge(acc, cov)
+			} else {
+				acc := make([]byte, coverage.BitmapSize)
+				coverage.Merge(acc, cov)
+				c.perTargetCov[name] = acc
+			}
+		}
+		targetEdges := make(map[string]int, len(c.perTargetCov))
+		for name, acc := range c.perTargetCov {
+			targetEdges[name] = coverage.CountBits(acc)
 		}
 		c.stats.Update(c.corpus.Len(), coverage.CountBits(c.globalCov), findings, targetEdges)
 		c.stats.PrintIfDue()

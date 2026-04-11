@@ -59,10 +59,16 @@ export function fuzzToFetchHeaders(uint8) {
   };
 }
 
+let first = true
 async function harnes(input) {
+  if (first) {
+    //Sleep 1 sec to give the servers a chance to start before we connect to the fuzzer
+    await sleep(1000);
+    first = false
+  }
   const headers = fuzzToFetchHeaders(input);
   try {
-    const response = await fetch(url + `/?data=${input}`, { headers: headers });
+    const response = await fetch(url + `/?data=${encodeURIComponent( input)}`, { headers: headers });
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -83,8 +89,6 @@ async function harnes(input) {
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function main() {
-  //Sleep 1 sec to give the servers a chance to start before we connect to the fuzzer
-  await sleep(1000);
 
   // This harness only triggers behavior in the server targets; its own
   // coverage is not meaningful.
