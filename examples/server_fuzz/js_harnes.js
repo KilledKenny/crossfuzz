@@ -1,5 +1,5 @@
-import { run } from "../../harness/js/crossfuzz";
-const url = "https://127.0.0.1:8000";
+import { run, resetCoverage } from "../../harness/js/crossfuzz";
+const url = "http://127.0.0.1:8000";
 
 function fuzzInflate(bytes) {
   const out = [];
@@ -60,9 +60,9 @@ export function fuzzToFetchHeaders(uint8) {
 }
 
 async function harnes(input) {
-  headers = fuzzToFetchHeaders(input)
+  const headers = fuzzToFetchHeaders(input);
   try {
-    const response = await fetch(url,{headers:headers});
+    const response = await fetch(url + `/?data=${input}`, { headers: headers });
 
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
@@ -71,20 +71,26 @@ async function harnes(input) {
     // Read response as plain text (NOT JSON)
     const text = await response.text();
 
-    console.log("Response from server:");
-    console.log(text);
+    //console.log("Response from server:");
+    //console.log(text);
   } catch (error) {
-    console.error("Request failed:", error.message);
+    return await harnes("")
+    //console.error("Request failed:", error.message);
   }
+
+  // This harness only triggers behavior in the server targets; its own
+  // coverage is not meaningful. Zero Istanbul counters so the coordinator
+  // sees null metrics from this target every iteration.
+  resetCoverage();
 }
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function main() {
-  //Sleep 1 sec to give the servers a chans to start before we connect to the fuzzer
+  //Sleep 1 sec to give the servers a chance to start before we connect to the fuzzer
   await sleep(1000);
 
-  /** FUZZING INSTRUMETATION DISABLE COMPLETELY - this application is just a harnes to trigger behavior in the servers it should report the same null metrics each time*/ 
   run(harnes);
 }
 
-main()
+main();

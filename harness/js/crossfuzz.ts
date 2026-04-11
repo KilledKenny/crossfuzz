@@ -142,6 +142,14 @@ function collectCoverage(bitmap: Uint8Array): void {
   }
 }
 
+// resetCoverage zeroes all Istanbul counters. Call this at the end of a
+// harness function to prevent the harness's own coverage from being
+// reported — useful when the harness is only a trigger and coverage
+// should come entirely from instrumented server targets.
+export function resetCoverage(): void {
+  resetIstanbulCounters();
+}
+
 // ---- main harness entry point ----
 
 export async function run(target: TargetFn): Promise<void> {

@@ -1,5 +1,5 @@
 [campaign]
-name = "base64_diff"
+name = "server_fuzz"
 timeout = "30m"
 exec_timeout = "500ms"
 max_input_size = 1024
