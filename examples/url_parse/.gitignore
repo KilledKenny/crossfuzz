@@ -2,3 +2,4 @@ findings
 cache
 go_*_target
 *.class
+url_filter

@@ -24,3 +24,7 @@ build_cmd = "cd ../../harness/java && gradle jar && cd - && javac -cp ../../harn
 
 [comparator]
 type = "byte_equal"
+
+[input_filter]
+binary = "./url_filter"
+build_cmd = "cd filter && go build -o ../url_filter ."

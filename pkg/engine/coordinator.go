@@ -44,6 +44,7 @@ type Coordinator struct {
 	workers    []workerState
 	corpus     *Corpus
 	comparator compare.Comparator
+	filter     *runner.FilterProcess
 	stats      *Stats
 
 	covMu        sync.Mutex // protects globalCov and perTargetCov
@@ -62,7 +63,8 @@ type Coordinator struct {
 // NewCoordinator creates a coordinator for the given config, worker runner sets, and comparator.
 // Each WorkerRunners in workerSets gets its own isolated set of target processes and runs
 // the fuzzing loop concurrently with the others, sharing the corpus and global coverage bitmap.
-func NewCoordinator(cfg *config.Config, workerSets []WorkerRunners, comp compare.Comparator) *Coordinator {
+// filter may be nil if no input filter is configured.
+func NewCoordinator(cfg *config.Config, workerSets []WorkerRunners, comp compare.Comparator, filter *runner.FilterProcess) *Coordinator {
 	seed := time.Now().UnixNano()
 	workers := make([]workerState, len(workerSets))
 	for i, ws := range workerSets {
@@ -79,6 +81,7 @@ func NewCoordinator(cfg *config.Config, workerSets []WorkerRunners, comp compare
 		workers:      workers,
 		corpus:       NewCorpus(cfg.Corpus.SeedDir, cfg.Corpus.CacheDir),
 		comparator:   comp,
+		filter:       filter,
 		stats:        NewStats(),
 		globalCov:    make([]byte, coverage.BitmapSize),
 		perTargetCov: make(map[string][]byte),
@@ -243,8 +246,8 @@ func (c *Coordinator) Run(ctx context.Context) error {
 	close(errCh)
 
 	snap := c.stats.Snapshot()
-	fmt.Printf("\n\nCampaign finished. Total execs: %d, Corpus: %d, Findings: %d, Crashes: %d, Timeouts: %d\n",
-		snap.TotalExecs, c.corpus.Len(), c.findingsCount, snap.Crashes, snap.Timeouts)
+	fmt.Printf("\n\nCampaign finished. Total execs: %d, Rejected: %d, Corpus: %d, Findings: %d, Crashes: %d, Timeouts: %d\n",
+		snap.TotalExecs, snap.Rejected, c.corpus.Len(), c.findingsCount, snap.Crashes, snap.Timeouts)
 
 	for err := range errCh {
 		if err != nil {
@@ -274,6 +277,19 @@ func (c *Coordinator) runWorker(ctx context.Context, cancel context.CancelFunc, 
 			input = w.mutator.Splice(base, other)
 		} else {
 			input = w.mutator.Mutate(base)
+		}
+
+		// Run the input filter (if configured) before sending to targets.
+		if c.filter != nil {
+			accepted, err := c.filter.Filter(input)
+			if err != nil {
+				fmt.Printf("\nFilter error: %v\n", err)
+				continue
+			}
+			if !accepted {
+				c.stats.RecordRejected()
+				continue
+			}
 		}
 
 		// Execute on all targets.

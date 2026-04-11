@@ -177,6 +177,16 @@ func cmdBuild(cfg *config.Config) {
 			os.Exit(1)
 		}
 	}
+	if cfg.InputFilter.BuildCmd != "" {
+		fmt.Printf("Building input_filter: %s\n", cfg.InputFilter.BuildCmd)
+		cmd := exec.Command("sh", "-c", cfg.InputFilter.BuildCmd)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "Build failed for input_filter: %v\n", err)
+			os.Exit(1)
+		}
+	}
 	fmt.Println("Build complete.")
 }
 
@@ -292,10 +302,32 @@ func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debug
 	startRunners(allFlat)
 	defer stopRunners(allFlat)
 
+	// Start the input filter process if configured.
+	var filter *runner.FilterProcess
+	if cfg.InputFilter.Binary != "" {
+		var err error
+		filter, err = runner.NewFilterProcess(runner.ProcessConfig{
+			Name:   "input_filter",
+			Binary: cfg.InputFilter.Binary,
+			Args:   cfg.InputFilter.Args,
+			Env:    cfg.InputFilter.Env,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating input filter: %v\n", err)
+			os.Exit(1)
+		}
+		if err := filter.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error starting input filter: %v\n", err)
+			os.Exit(1)
+		}
+		defer filter.Stop()
+		fmt.Println("Started input filter.")
+	}
+
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	coord := engine.NewCoordinator(cfg, workerSets, comp)
+	coord := engine.NewCoordinator(cfg, workerSets, comp, filter)
 	coord.SetWarmupRounds(warmup)
 	coord.SetValidateRounds(validate)
 	coord.SetMaxFindings(maxFindings)

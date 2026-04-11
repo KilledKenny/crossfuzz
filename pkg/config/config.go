@@ -10,10 +10,21 @@ import (
 
 // Config is the top-level campaign configuration.
 type Config struct {
-	Campaign   CampaignConfig   `toml:"campaign"`
-	Corpus     CorpusConfig     `toml:"corpus"`
-	Targets    []TargetConfig   `toml:"target"`
-	Comparator ComparatorConfig `toml:"comparator"`
+	Campaign    CampaignConfig    `toml:"campaign"`
+	Corpus      CorpusConfig      `toml:"corpus"`
+	Targets     []TargetConfig    `toml:"target"`
+	Comparator  ComparatorConfig  `toml:"comparator"`
+	InputFilter InputFilterConfig `toml:"input_filter"`
+}
+
+// InputFilterConfig configures an optional external input filter process.
+// The filter receives each generated input via shared memory and responds
+// with accept or reject before the input is sent to any fuzz target.
+type InputFilterConfig struct {
+	Binary   string   `toml:"binary"`
+	Args     []string `toml:"args"`
+	BuildCmd string   `toml:"build_cmd"`
+	Env      []string `toml:"env"`
 }
 
 // CampaignConfig controls the fuzzing campaign.

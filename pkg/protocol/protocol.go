@@ -9,12 +9,14 @@ import (
 
 // Message types.
 const (
-	TypePing       = "ping"
-	TypePong       = "pong"
-	TypeFuzz       = "fuzz"
-	TypeFuzzResult = "fuzz_result"
-	TypeShutdown   = "shutdown"
-	TypeReady      = "ready"
+	TypePing         = "ping"
+	TypePong         = "pong"
+	TypeFuzz         = "fuzz"
+	TypeFuzzResult   = "fuzz_result"
+	TypeFilter       = "filter"
+	TypeFilterResult = "filter_result"
+	TypeShutdown     = "shutdown"
+	TypeReady        = "ready"
 )
 
 // Message is the wire protocol message exchanged between coordinator and workers.

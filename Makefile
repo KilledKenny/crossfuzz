@@ -25,7 +25,7 @@ harness/js/node_modules: harness/js/package.json harness/js/bun.lock
 
 .PHONY: test
 test:
-	go test ./...
+	go test -race ./...
 
 
 ALL_TARGET+= $(HARNESS_TARGET)

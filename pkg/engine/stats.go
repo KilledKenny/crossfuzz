@@ -12,6 +12,7 @@ type Stats struct {
 	mu          sync.Mutex
 	startTime   time.Time
 	totalExecs  uint64
+	rejected    uint64
 	corpusSize  int
 	coverBits   int
 	findings    int
@@ -41,6 +42,12 @@ func (s *Stats) RecordExec() {
 	s.mu.Unlock()
 }
 
+func (s *Stats) RecordRejected() {
+	s.mu.Lock()
+	s.rejected++
+	s.mu.Unlock()
+}
+
 func (s *Stats) RecordCrash() {
 	s.mu.Lock()
 	s.crashes++
@@ -65,6 +72,7 @@ func (s *Stats) Update(corpusSize, coverBits, findings int, targetEdges map[stri
 // StatsSnapshot holds a point-in-time copy of key stats values.
 type StatsSnapshot struct {
 	TotalExecs uint64
+	Rejected   uint64
 	Crashes    int
 	Timeouts   int
 }
@@ -75,6 +83,7 @@ func (s *Stats) Snapshot() StatsSnapshot {
 	defer s.mu.Unlock()
 	return StatsSnapshot{
 		TotalExecs: s.totalExecs,
+		Rejected:   s.rejected,
 		Crashes:    s.crashes,
 		Timeouts:   s.timeouts,
 	}
@@ -92,8 +101,8 @@ func (s *Stats) PrintIfDue() {
 	elapsed := time.Since(s.startTime)
 	execsPerSec := float64(s.totalExecs) / elapsed.Seconds()
 
-	line := fmt.Sprintf("\r\033[2K[%s] execs: %d (%.0f/sec) | corpus: %d | coverage: %d edges | findings: %d | crashes: %d | timeouts: %d",
-		elapsed.Truncate(time.Second), s.totalExecs, execsPerSec,
+	line := fmt.Sprintf("\r\033[2K[%s] execs: %d (%.0f/sec) | rejected: %d | corpus: %d | coverage: %d edges | findings: %d | crashes: %d | timeouts: %d",
+		elapsed.Truncate(time.Second), s.totalExecs, execsPerSec, s.rejected,
 		s.corpusSize, s.coverBits, s.findings, s.crashes, s.timeouts)
 
 	if s.debugEdge && len(s.targetEdges) > 0 {
