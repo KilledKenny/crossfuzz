@@ -24,14 +24,6 @@ type = "server"
 build_cmd = "cd go_ingress && PKGS=$(go list -deps . | grep -vE '^(runtime$|runtime/.*|sync$|sync/.*|internal/.*|reflect$|syscall$|os$|os/.*)' | paste -sd,) && go build -cover -covermode=atomic -coverpkg=\"$PKGS\" -o ../go_ingress_target ."
 
 [[target]]
-name = "js_harnes"
-language = "js"
-binary = "bun"
-type = "harness"
-args = ["run", "--preload", "../../harness/js/instrument.ts", "./js_harnes.js"]
-build_cmd = "cd ../../harness/js && bun install"
-
-[[target]]
 name = "JavaReverseProxy"
 language = "java"
 binary = "java"
@@ -39,6 +31,13 @@ type = "server"
 args = ["-javaagent:../../harness/java/build/libs/crossfuzz.jar", "-cp", "../../harness/java/build/libs/crossfuzz.jar:.", "JavaReverseProxy"]
 build_cmd = "cd ../../harness/java && gradle jar && cd - && javac -cp ../../harness/java/build/libs/crossfuzz.jar JavaReverseProxy.java"
 
+[[target]]
+name = "js_harnes"
+language = "js"
+binary = "bun"
+type = "harness"
+args = ["run", "--preload", "../../harness/js/instrument.ts", "./js_harnes.js"]
+build_cmd = "cd ../../harness/js && bun install"
 
 [comparator]
 type = "none"

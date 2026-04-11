@@ -32,6 +32,7 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  --corpus=DIR            Directory for corpus entries (default: corpus)\n")
 	fmt.Fprintf(os.Stderr, "  --findings=DIR          Directory for saving findings (default: findings)\n")
 	fmt.Fprintf(os.Stderr, "  --corpus-reduced=DIR    Output directory for reduced corpus (reduce command only, default: corpus-reduced)\n")
+	fmt.Fprintf(os.Stderr, "  --debug-edge            Print per-target edge counts in status ticker (run command only)\n")
 }
 
 func main() {
@@ -50,6 +51,7 @@ func main() {
 	corpusFlag := fs.String("corpus", "corpus", "Directory for storing and loading corpus entries (run command only)")
 	findingsFlag := fs.String("findings", "findings", "Directory for saving findings (run command only)")
 	corpusReducedFlag := fs.String("corpus-reduced", "corpus-reduced", "Output directory for reduced corpus (reduce command only)")
+	debugEdgeFlag := fs.Bool("debug-edge", false, "Print per-target edge counts in status ticker (run command only)")
 	fs.Usage = usage
 
 	// os.Args[2] is the config file; flags follow after
@@ -84,7 +86,7 @@ func main() {
 		if *buildFlag {
 			cmdBuild(cfg)
 		}
-		cmdRun(cfg, *warmupFlag, *validateFlag, *maxFindingsFlag)
+		cmdRun(cfg, *warmupFlag, *validateFlag, *maxFindingsFlag, *debugEdgeFlag)
 	case "reduce":
 		if isFlagSet(fs, "corpus") || cfg.Corpus.CacheDir == "" {
 			cfg.Corpus.CacheDir = *corpusFlag
@@ -204,7 +206,7 @@ func stopRunners(runners []runner.Runner) {
 	}
 }
 
-func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int) {
+func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debugEdge bool) {
 	harness, servers := buildRunners(cfg)
 
 	var comp compare.Comparator
@@ -241,6 +243,7 @@ func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int) {
 	coord.SetWarmupRounds(warmup)
 	coord.SetValidateRounds(validate)
 	coord.SetMaxFindings(maxFindings)
+	coord.SetDebugEdge(debugEdge)
 	if err := coord.Run(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "Campaign error: %v\n", err)
 		os.Exit(1)

@@ -74,6 +74,11 @@ func (c *Coordinator) SetMaxFindings(n int) {
 	c.maxFindings = n
 }
 
+// SetDebugEdge enables per-target edge counts in the status ticker output.
+func (c *Coordinator) SetDebugEdge(enabled bool) {
+	c.stats.SetDebugEdge(enabled)
+}
+
 // validateStability runs input through all runners n times and checks whether
 // each target produces identical output or coverage on every run. Returns the
 // names of any targets whose output or coverage changed across runs (sorted).
@@ -134,7 +139,7 @@ func (c *Coordinator) Warmup(ctx context.Context, rounds int) error {
 				return nil
 			default:
 			}
-			_, cov, err := c.executeAll(input)
+			_, _, cov, err := c.executeAll(input)
 			if err != nil {
 				return fmt.Errorf("warmup exec: %w", err)
 			}
@@ -195,7 +200,7 @@ func (c *Coordinator) Run(ctx context.Context) error {
 		}
 
 		// Execute on all targets.
-		outputs, combinedCov, execErr := c.executeAll(input)
+		outputs, perTargetCov, combinedCov, execErr := c.executeAll(input)
 		if execErr != nil {
 			fmt.Printf("\nExec error: %v\n", execErr)
 			continue
@@ -249,15 +254,19 @@ func (c *Coordinator) Run(ctx context.Context) error {
 			}
 		}
 
-		c.stats.Update(c.corpus.Len(), coverage.CountBits(c.globalCov), findings)
+		targetEdges := make(map[string]int, len(perTargetCov))
+		for name, cov := range perTargetCov {
+			targetEdges[name] = coverage.CountBits(cov)
+		}
+		c.stats.Update(c.corpus.Len(), coverage.CountBits(c.globalCov), findings, targetEdges)
 		c.stats.PrintIfDue()
 	}
 }
 
 // executeAll runs input through all harness targets and collects coverage
-// from server targets. Returns outputs from harness runners plus the merged
-// raw (un-bucketized) coverage bitmap from all targets.
-func (c *Coordinator) executeAll(input []byte) (map[string][]byte, []byte, error) {
+// from server targets. Returns outputs from harness runners, a per-target
+// coverage map, and the merged raw (un-bucketized) coverage bitmap from all targets.
+func (c *Coordinator) executeAll(input []byte) (map[string][]byte, map[string][]byte, []byte, error) {
 	// Reset server coverage bitmaps before the harness runs so we only
 	// capture edges from this iteration. Harness runners reset themselves
 	// inside Execute().
@@ -267,23 +276,26 @@ func (c *Coordinator) executeAll(input []byte) (map[string][]byte, []byte, error
 
 	// Execute harness runners via the pipe protocol.
 	outputs := make(map[string][]byte, len(c.runners))
+	perTargetCov := make(map[string][]byte, len(c.runners)+len(c.serverRunners))
 	combined := make([]byte, coverage.BitmapSize)
 	for _, r := range c.runners {
 		output, cov, err := r.Execute(input)
 		if err != nil {
-			return nil, nil, fmt.Errorf("target %s: %w", r.Name(), err)
+			return nil, nil, nil, fmt.Errorf("target %s: %w", r.Name(), err)
 		}
 		outputs[r.Name()] = output
+		perTargetCov[r.Name()] = cov
 		coverage.Merge(combined, cov)
 	}
 
 	// Read coverage accumulated by server targets while the harness ran.
 	for _, s := range c.serverRunners {
 		_, cov, _ := s.Execute(input)
+		perTargetCov[s.Name()] = cov
 		coverage.Merge(combined, cov)
 	}
 
-	return outputs, combined, nil
+	return outputs, perTargetCov, combined, nil
 }
 
 func (c *Coordinator) saveFinding(disc *compare.Discrepancy, id int) {

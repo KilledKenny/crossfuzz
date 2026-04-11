@@ -13,7 +13,7 @@ func main() {
 	gofuzz.InitServer()
 
 	// Upstream server you want to proxy to
-	target, err := url.Parse("http://localhost:9000")
+	target, err := url.Parse("http://127.0.0.1:8080")
 	if err != nil {
 		log.Fatal(err)
 	}

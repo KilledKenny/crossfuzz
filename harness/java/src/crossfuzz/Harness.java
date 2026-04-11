@@ -29,6 +29,9 @@ public class Harness {
     static final int MAX_OUTPUT = 1_048_576;
     static final int MAX_MSG    = 1 << 20;
 
+    // Shared memory buffer set by initServer(); reused by run().
+    private static volatile MappedByteBuffer shm;
+
     /** Configures optional harness behaviour. */
     public static class Settings {
         /**
@@ -39,31 +42,40 @@ public class Harness {
         public boolean disableInstrumentation = false;
     }
 
+    /**
+     * Opens the shared-memory region advertised via {@code CROSSFUZZ_SHM} and
+     * initialises {@link CoverageRuntime} for the coverage bitmap. Call this
+     * once from {@code main()} in a server target before starting to serve
+     * requests, mirroring {@code gofuzz.InitServer()}.
+     *
+     * <p>If {@code CROSSFUZZ_SHM} is not set (e.g. running outside a fuzzing
+     * campaign) this method is a no-op.
+     */
+    public static void initServer() throws Exception {
+        String shmPath = System.getenv("CROSSFUZZ_SHM");
+        if (shmPath == null) return;
+        RandomAccessFile raf = new RandomAccessFile(shmPath, "rw");
+        FileChannel ch = raf.getChannel();
+        MappedByteBuffer mapped = ch.map(FileChannel.MapMode.READ_WRITE, 0, TOTAL_SHM_SIZE);
+        mapped.order(ByteOrder.LITTLE_ENDIAN);
+        shm = mapped;
+        ByteBuffer covSlice = mapped.duplicate();
+        covSlice.order(ByteOrder.LITTLE_ENDIAN);
+        covSlice.position(COVERAGE_OFFSET);
+        covSlice.limit(COVERAGE_OFFSET + 65_536);
+        CoverageRuntime.init(covSlice.slice());
+    }
+
     public static void run(Target target) throws Exception {
         run(target, new Settings());
     }
 
     public static void run(Target target, Settings settings) throws Exception {
-        String shmPath = System.getenv("CROSSFUZZ_SHM");
-        if (shmPath == null) {
-            throw new RuntimeException("CROSSFUZZ_SHM not set");
+        if (shm == null) {
+            if (System.getenv("CROSSFUZZ_SHM") == null)
+                throw new RuntimeException("CROSSFUZZ_SHM not set");
+            initServer();
         }
-
-        // Map shared memory
-        RandomAccessFile raf = new RandomAccessFile(shmPath, "rw");
-        FileChannel shmChannel = raf.getChannel();
-        MappedByteBuffer shm = shmChannel.map(
-            FileChannel.MapMode.READ_WRITE, 0, TOTAL_SHM_SIZE);
-        shm.order(ByteOrder.LITTLE_ENDIAN);
-
-        // Slice out the coverage bitmap region and hand it to CoverageRuntime
-        ByteBuffer covSlice = shm.duplicate();
-        covSlice.order(ByteOrder.LITTLE_ENDIAN);
-        covSlice.position(COVERAGE_OFFSET);
-        covSlice.limit(COVERAGE_OFFSET + 65_536);
-        // Re-initialize with the Harness mapping (agent may have already done this;
-        // both mappings point to the same physical pages so either works).
-        CoverageRuntime.init(covSlice.slice());
         if (settings.disableInstrumentation) {
             CoverageRuntime.disable();
         }
@@ -110,9 +122,6 @@ public class Harness {
             }
             // ignore unknown message types
         }
-
-        shmChannel.close();
-        raf.close();
     }
 
     private static String readMsg(InputStream in) throws IOException {
