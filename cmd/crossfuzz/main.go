@@ -22,6 +22,8 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  run     Run differential fuzzing campaign\n")
 	fmt.Fprintf(os.Stderr, "Flags:\n")
 	fmt.Fprintf(os.Stderr, "  --name=fuzz1,fuzz2   Comma-separated list of target names to build/run (default: all)\n")
+	fmt.Fprintf(os.Stderr, "  --build              Build all targets before running (run command only)\n")
+	fmt.Fprintf(os.Stderr, "  --warmup=N           Run corpus N times before the main fuzzing loop (run command only)\n")
 }
 
 func main() {
@@ -33,6 +35,8 @@ func main() {
 	command := os.Args[1]
 	fs := flag.NewFlagSet(command, flag.ExitOnError)
 	nameFlag := fs.String("name", "", "Comma-separated list of target names to build/run (default: all)")
+	buildFlag := fs.Bool("build", false, "Build all targets before running (run command only)")
+	warmupFlag := fs.Int("warmup", 0, "Number of times to run the corpus before the main fuzzing loop (run command only)")
 	fs.Usage = usage
 
 	// os.Args[2] is the config file; flags follow after
@@ -58,7 +62,10 @@ func main() {
 	case "build":
 		cmdBuild(cfg)
 	case "run":
-		cmdRun(cfg)
+		if *buildFlag {
+			cmdBuild(cfg)
+		}
+		cmdRun(cfg, *warmupFlag)
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
 		os.Exit(1)
@@ -99,7 +106,7 @@ func cmdBuild(cfg *config.Config) {
 	fmt.Println("Build complete.")
 }
 
-func cmdRun(cfg *config.Config) {
+func cmdRun(cfg *config.Config, warmup int) {
 	var runners []runner.Runner
 	for _, tc := range cfg.Targets {
 		r, err := runner.NewProcess(runner.ProcessConfig{
@@ -157,6 +164,7 @@ func cmdRun(cfg *config.Config) {
 	defer cancel()
 
 	coord := engine.NewCoordinator(cfg, runners, comp)
+	coord.SetWarmupRounds(warmup)
 	if err := coord.Run(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "Campaign error: %v\n", err)
 		os.Exit(1)

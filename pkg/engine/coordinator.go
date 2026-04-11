@@ -20,14 +20,15 @@ import (
 
 // Coordinator drives the fuzzing campaign.
 type Coordinator struct {
-	cfg        *config.Config
-	runners    []runner.Runner
-	corpus     *Corpus
-	mutator    *Mutator
-	comparator compare.Comparator
-	stats      *Stats
-	globalCov  []byte
-	rng        *rand.Rand
+	cfg          *config.Config
+	runners      []runner.Runner
+	corpus       *Corpus
+	mutator      *Mutator
+	comparator   compare.Comparator
+	stats        *Stats
+	globalCov    []byte
+	rng          *rand.Rand
+	warmupRounds int
 }
 
 // NewCoordinator creates a coordinator for the given config and runners.
@@ -45,7 +46,41 @@ func NewCoordinator(cfg *config.Config, runners []runner.Runner, comp compare.Co
 	}
 }
 
+// SetWarmupRounds configures the number of warmup rounds to run before the
+// main fuzzing loop. Each corpus entry is executed this many times to
+// pre-seed the global coverage bitmap.
+func (c *Coordinator) SetWarmupRounds(n int) {
+	c.warmupRounds = n
+}
+
 var logCovSometimes = rate.Sometimes{First: 10, Interval: time.Second}
+
+// Warmup runs every corpus entry rounds times to pre-seed the global coverage
+// bitmap before the main fuzzing loop begins.
+func (c *Coordinator) Warmup(ctx context.Context, rounds int) error {
+	if rounds <= 0 {
+		return nil
+	}
+	entries := c.corpus.All()
+	fmt.Printf("Warmup: running %d corpus entries × %d rounds\n", len(entries), rounds)
+	for round := 0; round < rounds; round++ {
+		for _, input := range entries {
+			select {
+			case <-ctx.Done():
+				return nil
+			default:
+			}
+			_, cov, err := c.executeAll(input)
+			if err != nil {
+				return fmt.Errorf("warmup exec: %w", err)
+			}
+			coverage.Bucketize(cov)
+			coverage.Merge(c.globalCov, cov)
+		}
+	}
+	fmt.Printf("Warmup complete. Coverage bits: %d\n", coverage.CountBits(c.globalCov))
+	return nil
+}
 
 // Run executes the fuzzing campaign until the context is cancelled or timeout.
 func (c *Coordinator) Run(ctx context.Context) error {
@@ -60,6 +95,12 @@ func (c *Coordinator) Run(ctx context.Context) error {
 
 	fmt.Printf("Starting campaign %q with %d targets, %d seed inputs\n",
 		c.cfg.Campaign.Name, len(c.runners), c.corpus.Len())
+
+	if c.warmupRounds > 0 {
+		if err := c.Warmup(ctx, c.warmupRounds); err != nil {
+			return fmt.Errorf("warmup: %w", err)
+		}
+	}
 
 	if c.cfg.Campaign.Timeout.Duration > 0 {
 		var cancel context.CancelFunc

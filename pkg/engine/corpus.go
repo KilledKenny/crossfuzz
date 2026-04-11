@@ -89,3 +89,10 @@ func (c *Corpus) Pick(rng *rand.Rand) []byte {
 func (c *Corpus) Len() int {
 	return len(c.entries)
 }
+
+// All returns a snapshot of all corpus entries.
+func (c *Corpus) All() [][]byte {
+	result := make([][]byte, len(c.entries))
+	copy(result, c.entries)
+	return result
+}
