@@ -94,11 +94,17 @@ func main() {
 		}
 		cmdRun(cfg, *warmupFlag, *validateFlag, *maxFindingsFlag, *debugEdgeFlag)
 	case "reduce":
+		if *buildFlag {
+			cmdBuild(cfg)
+		}
 		if isFlagSet(fs, "corpus") || cfg.Corpus.CacheDir == "" {
 			cfg.Corpus.CacheDir = *corpusFlag
 		}
 		cmdReduce(cfg, *corpusReducedFlag, *validateFlag)
 	case "analyze":
+		if *buildFlag {
+			cmdBuild(cfg)
+		}
 		if *payloadFlag == "" && *payloadPathFlag == "" {
 			fmt.Fprintf(os.Stderr, "analyze requires --payload or --payload-path\n")
 			os.Exit(1)
@@ -302,16 +308,14 @@ func cmdAnalyze(cfg *config.Config, payload string, payloadPath string) {
 	startRunners(all)
 	defer stopRunners(all)
 
-	var payloads []struct {
-		name  string
-		data  []byte
+	type namedPayload struct {
+		name string
+		data []byte
 	}
+	var payloads []namedPayload
 
 	if payload != "" {
-		payloads = append(payloads, struct {
-			name string
-			data []byte
-		}{name: "<payload>", data: []byte(payload)})
+		payloads = append(payloads, namedPayload{name: "<payload>", data: []byte(payload)})
 	}
 
 	if payloadPath != "" {
@@ -336,10 +340,7 @@ func cmdAnalyze(cfg *config.Config, payload string, payloadPath string) {
 					fmt.Fprintf(os.Stderr, "Error reading %s: %v\n", p, err)
 					os.Exit(1)
 				}
-				payloads = append(payloads, struct {
-					name string
-					data []byte
-				}{name: entry.Name(), data: data})
+				payloads = append(payloads, namedPayload{name: entry.Name(), data: data})
 			}
 		} else {
 			data, err := os.ReadFile(payloadPath)
@@ -347,10 +348,7 @@ func cmdAnalyze(cfg *config.Config, payload string, payloadPath string) {
 				fmt.Fprintf(os.Stderr, "Error reading payload file: %v\n", err)
 				os.Exit(1)
 			}
-			payloads = append(payloads, struct {
-				name string
-				data []byte
-			}{name: filepath.Base(payloadPath), data: data})
+			payloads = append(payloads, namedPayload{name: filepath.Base(payloadPath), data: data})
 		}
 	}
 
@@ -359,16 +357,38 @@ func cmdAnalyze(cfg *config.Config, payload string, payloadPath string) {
 		os.Exit(1)
 	}
 
+	type result struct {
+		name   string
+		output []byte
+		err    error
+	}
+
 	for _, p := range payloads {
 		fmt.Printf("=== Payload: %s (%d bytes) ===\n", p.name, len(p.data))
 		fmt.Printf("Input:\n%s\n", hex.Dump(p.data))
-		for _, r := range all {
-			output, _, err := r.Execute(p.data)
-			fmt.Printf("--- Target: %s ---\n", r.Name())
-			if err != nil {
-				fmt.Printf("Error: %v\n", err)
+
+		// Collect all outputs before printing so we can compute the diff mask.
+		results := make([]result, len(all))
+		for i, r := range all {
+			out, _, err := r.Execute(p.data)
+			results[i] = result{name: r.Name(), output: out, err: err}
+		}
+
+		// Build mask over successful outputs only.
+		var successful [][]byte
+		for _, res := range results {
+			if res.err == nil {
+				successful = append(successful, res.output)
+			}
+		}
+		mask := diffMask(successful)
+
+		for _, res := range results {
+			fmt.Printf("--- Target: %s ---\n", res.name)
+			if res.err != nil {
+				fmt.Printf("Error: %v\n", res.err)
 			} else {
-				fmt.Print(hex.Dump(output))
+				fmt.Print(colorHexDump(res.output, mask))
 			}
 		}
 		fmt.Println()
