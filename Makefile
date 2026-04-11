@@ -14,7 +14,7 @@ JAVA_HARNES_INPUT=$(find harness/java/src/ -name "*.java")
 JAVA_HARNES_INPUT+= $(wildcard harness/java/*.gradle)
 
 HARNESS_TARGET+= harness/java/build/libs/crossfuzz.jar
-harness/java/build/libs/crossfuzz.jar:
+harness/java/build/libs/crossfuzz.jar: $(JAVA_HARNES_INPUT)
 	cd ./harness/java && gradle jar
 
 

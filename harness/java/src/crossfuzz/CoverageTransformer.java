@@ -34,17 +34,7 @@ public class CoverageTransformer implements ClassFileTransformer {
             if (className.startsWith(p)) return null;
         }
         try {
-            // ASM 9.7 supports up to class file version 67 (Java 23). Java 25 produces
-            // version 69. Patch the major version down to 65 (Java 21) before reading —
-            // the JVM accepts any class version ≤ its own, so the output loads fine.
-            byte[] src = buf;
-            int major = ((buf[6] & 0xFF) << 8) | (buf[7] & 0xFF);
-            if (major > 65) {
-                src = buf.clone();
-                src[6] = 0;
-                src[7] = 65;
-            }
-            ClassReader cr = new ClassReader(src);
+            ClassReader cr = new ClassReader(buf);
             ClassNode cn = new ClassNode();
             // SKIP_FRAMES: don't parse existing frames — leaves no FrameNodes in the tree
             // so insertions after LabelNodes are always placed before the first real insn.
