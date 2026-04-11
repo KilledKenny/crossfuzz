@@ -28,5 +28,12 @@ binary = "java"
 args = ["-javaagent:../../harness/java/build/libs/crossfuzz.jar", "-cp", "../../harness/java/build/libs/crossfuzz.jar:.", "JavaTarget"]
 build_cmd = "cd ../../harness/java && gradle jar && cd - && javac -cp ../../harness/java/build/libs/crossfuzz.jar JavaTarget.java"
 
+[[target]]
+name = "ts_json"
+language = "js"
+binary = "bun"
+args = ["run", "--preload", "../../harness/js/instrument.ts", "./ts_target.ts"]
+build_cmd = "cd ../../harness/js && bun install"
+
 [comparator]
 type = "byte_equal"

@@ -70,6 +70,21 @@ public class JavaTarget implements Target {
                         byte h = src[pos++];
                         if (!isHex(h)) throw new Exception("bad hex digit");
                     }
+                }else {
+                    switch (esc) {
+                        case '"':
+                        case '\\':
+                        case '/':
+                        case 'b':
+                        case 'f':
+                        case 'n':
+                        case 'r':
+                        case 't':
+                            break;
+                        default:
+                            throw new Exception("invalid char in escape code");
+                    }
+
                 }
                 // other escapes accepted as-is
             } else if ((c & 0xFF) < 0x20) {
