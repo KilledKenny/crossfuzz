@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -187,8 +188,8 @@ func (c *Coordinator) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Printf("\n\nCampaign finished. Total execs: %d, Corpus: %d, Findings: %d\n",
-				c.stats.totalExecs, c.corpus.Len(), findings)
+			fmt.Printf("\n\nCampaign finished. Total execs: %d, Corpus: %d, Findings: %d, Crashes: %d, Timeouts: %d\n",
+				c.stats.totalExecs, c.corpus.Len(), findings, c.stats.crashes, c.stats.timeouts)
 			return nil
 		default:
 		}
@@ -206,7 +207,9 @@ func (c *Coordinator) Run(ctx context.Context) error {
 		// Execute on all targets.
 		outputs, perTargetCov, combinedCov, execErr := c.executeAll(input)
 		if execErr != nil {
-			fmt.Printf("\nExec error: %v\n", execErr)
+			if !errors.Is(execErr, errSkipIteration) {
+				fmt.Printf("\nExec error: %v\n", execErr)
+			}
 			continue
 		}
 
@@ -280,9 +283,14 @@ func (c *Coordinator) Run(ctx context.Context) error {
 	}
 }
 
+// errSkipIteration is returned by executeAll when a crash or timeout was
+// detected, saved, and the iteration should be skipped without aborting the campaign.
+var errSkipIteration = errors.New("skip iteration")
+
 // executeAll runs input through all harness targets and collects coverage
 // from server targets. Returns outputs from harness runners, a per-target
 // coverage map, and the merged raw (un-bucketized) coverage bitmap from all targets.
+// On crash or timeout, saves a finding and returns errSkipIteration.
 func (c *Coordinator) executeAll(input []byte) (map[string][]byte, map[string][]byte, []byte, error) {
 	// Reset server coverage bitmaps before the harness runs so we only
 	// capture edges from this iteration. Harness runners reset themselves
@@ -298,7 +306,26 @@ func (c *Coordinator) executeAll(input []byte) (map[string][]byte, map[string][]
 	for _, r := range c.runners {
 		output, cov, err := r.Execute(input)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("target %s: %w", r.Name(), err)
+			var te *runner.TimeoutError
+			var ce *runner.CrashError
+			switch {
+			case errors.As(err, &te):
+				c.stats.RecordTimeout()
+				fmt.Printf("\n[TIMEOUT] %s (%d-byte input)\n", te.TargetName, len(input))
+				if saveErr := c.saveSpecialFinding("timeout", te.TargetName, input); saveErr != nil {
+					fmt.Printf("[WARN] failed to save timeout finding: %v\n", saveErr)
+				}
+				return nil, nil, nil, errSkipIteration
+			case errors.As(err, &ce):
+				c.stats.RecordCrash()
+				fmt.Printf("\n[CRASH] %s (%d-byte input): %v\n", ce.TargetName, len(input), ce.ExitState)
+				if saveErr := c.saveSpecialFinding("crash", ce.TargetName, input); saveErr != nil {
+					fmt.Printf("[WARN] failed to save crash finding: %v\n", saveErr)
+				}
+				return nil, nil, nil, errSkipIteration
+			default:
+				return nil, nil, nil, fmt.Errorf("target %s: %w", r.Name(), err)
+			}
 		}
 		outputs[r.Name()] = output
 		perTargetCov[r.Name()] = cov
@@ -316,6 +343,38 @@ func (c *Coordinator) executeAll(input []byte) (map[string][]byte, map[string][]
 	}
 
 	return outputs, perTargetCov, combined, nil
+}
+
+// saveSpecialFinding writes a crash or timeout input to the findings directory.
+func (c *Coordinator) saveSpecialFinding(kind, targetName string, input []byte) error {
+	h := sha256.Sum256(input)
+	dirName := fmt.Sprintf("%s_%s_%x", kind, targetName, h[:6])
+	dir := filepath.Join(c.cfg.Corpus.FindingsDir, dirName)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create finding dir: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "input.bin"), input, 0644); err != nil {
+		return fmt.Errorf("write input.bin: %w", err)
+	}
+	type metadata struct {
+		Kind      string `json:"kind"`
+		Target    string `json:"target"`
+		Hash      string `json:"hash"`
+		InputLen  int    `json:"input_len"`
+		Timestamp string `json:"timestamp"`
+	}
+	meta := metadata{
+		Kind:      kind,
+		Target:    targetName,
+		Hash:      fmt.Sprintf("%x", h),
+		InputLen:  len(input),
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+	}
+	data, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal metadata: %w", err)
+	}
+	return os.WriteFile(filepath.Join(dir, "metadata.json"), data, 0644)
 }
 
 func (c *Coordinator) saveFinding(disc *compare.Discrepancy, id int) error {

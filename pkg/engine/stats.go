@@ -15,6 +15,8 @@ type Stats struct {
 	corpusSize  int
 	coverBits   int
 	findings    int
+	crashes     int
+	timeouts    int
 	lastPrint   time.Time
 	debugEdge   bool
 	targetEdges map[string]int
@@ -39,6 +41,18 @@ func (s *Stats) RecordExec() {
 	s.mu.Unlock()
 }
 
+func (s *Stats) RecordCrash() {
+	s.mu.Lock()
+	s.crashes++
+	s.mu.Unlock()
+}
+
+func (s *Stats) RecordTimeout() {
+	s.mu.Lock()
+	s.timeouts++
+	s.mu.Unlock()
+}
+
 func (s *Stats) Update(corpusSize, coverBits, findings int, targetEdges map[string]int) {
 	s.mu.Lock()
 	s.corpusSize = corpusSize
@@ -60,9 +74,9 @@ func (s *Stats) PrintIfDue() {
 	elapsed := time.Since(s.startTime)
 	execsPerSec := float64(s.totalExecs) / elapsed.Seconds()
 
-	line := fmt.Sprintf("\r\033[2K[%s] execs: %d (%.0f/sec) | corpus: %d | coverage: %d edges | findings: %d",
+	line := fmt.Sprintf("\r\033[2K[%s] execs: %d (%.0f/sec) | corpus: %d | coverage: %d edges | findings: %d | crashes: %d | timeouts: %d",
 		elapsed.Truncate(time.Second), s.totalExecs, execsPerSec,
-		s.corpusSize, s.coverBits, s.findings)
+		s.corpusSize, s.coverBits, s.findings, s.crashes, s.timeouts)
 
 	if s.debugEdge && len(s.targetEdges) > 0 {
 		names := make([]string, 0, len(s.targetEdges))

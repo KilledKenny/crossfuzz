@@ -10,7 +10,9 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"crossfuzz/pkg/compare"
 	"crossfuzz/pkg/config"
@@ -31,6 +33,8 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  --warmup=N              Run corpus N times before the main fuzzing loop (run command only)\n")
 	fmt.Fprintf(os.Stderr, "  --max-findings=N        Stop after N unique findings (run command only, default: 10)\n")
 	fmt.Fprintf(os.Stderr, "  --validate=N            Re-execute each new input N times; log unstable inputs and which targets differ\n")
+	fmt.Fprintf(os.Stderr, "  --timeout=DURATION      Per-execution timeout; kill and restart target on expiry (default: 5s)\n")
+	fmt.Fprintf(os.Stderr, "  --max-memory=SIZE       Virtual memory limit per target process (e.g. 512M, 1G); 0 = no limit\n")
 	fmt.Fprintf(os.Stderr, "  --corpus=DIR            Directory for corpus entries (default: corpus)\n")
 	fmt.Fprintf(os.Stderr, "  --findings=DIR          Directory for saving findings (default: findings)\n")
 	fmt.Fprintf(os.Stderr, "  --corpus-reduced=DIR    Output directory for reduced corpus (reduce command only, default: corpus-reduced)\n")
@@ -52,6 +56,8 @@ func main() {
 	warmupFlag := fs.Int("warmup", 0, "Number of times to run the corpus before the main fuzzing loop (run command only)")
 	maxFindingsFlag := fs.Int("max-findings", 10, "Stop after this many unique findings (run command only)")
 	validateFlag := fs.Int("validate", 0, "Re-execute each new input N times to confirm stable output; log unstable inputs with differing targets")
+	timeoutFlag := fs.String("timeout", "5s", "Per-execution timeout; target is killed and restarted on expiry (e.g. 5s, 500ms)")
+	maxMemoryFlag := fs.String("max-memory", "0", "Virtual memory limit per target (e.g. 512M, 1G); 0 = no limit")
 	corpusFlag := fs.String("corpus", "corpus", "Directory for storing and loading corpus entries (run command only)")
 	findingsFlag := fs.String("findings", "findings", "Directory for saving findings (run command only)")
 	corpusReducedFlag := fs.String("corpus-reduced", "corpus-reduced", "Output directory for reduced corpus (reduce command only)")
@@ -79,6 +85,21 @@ func main() {
 		}
 	}
 
+	// Parse --timeout (overrides config exec_timeout).
+	execTimeout, err := time.ParseDuration(*timeoutFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid --timeout %q: %v\n", *timeoutFlag, err)
+		os.Exit(1)
+	}
+	cfg.Campaign.ExecTimeout.Duration = execTimeout
+
+	// Parse --max-memory.
+	memLimit, err := parseBytes(*maxMemoryFlag)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Invalid --max-memory %q: %v\n", *maxMemoryFlag, err)
+		os.Exit(1)
+	}
+
 	switch command {
 	case "build":
 		cmdBuild(cfg)
@@ -92,7 +113,7 @@ func main() {
 		if *buildFlag {
 			cmdBuild(cfg)
 		}
-		cmdRun(cfg, *warmupFlag, *validateFlag, *maxFindingsFlag, *debugEdgeFlag)
+		cmdRun(cfg, *warmupFlag, *validateFlag, *maxFindingsFlag, *debugEdgeFlag, memLimit)
 	case "reduce":
 		if *buildFlag {
 			cmdBuild(cfg)
@@ -160,7 +181,7 @@ func cmdBuild(cfg *config.Config) {
 	fmt.Println("Build complete.")
 }
 
-func buildRunners(cfg *config.Config) ([]runner.Runner, []*runner.ServerProcess) {
+func buildRunners(cfg *config.Config, memLimit uint64) ([]runner.Runner, []*runner.ServerProcess) {
 	var harness []runner.Runner
 	var servers []*runner.ServerProcess
 	for _, tc := range cfg.Targets {
@@ -178,11 +199,12 @@ func buildRunners(cfg *config.Config) ([]runner.Runner, []*runner.ServerProcess)
 			servers = append(servers, r)
 		} else {
 			r, err := runner.NewProcess(runner.ProcessConfig{
-				Name:    tc.Name,
-				Binary:  tc.Binary,
-				Args:    tc.Args,
-				Env:     tc.Env,
-				Timeout: cfg.Campaign.ExecTimeout.Duration,
+				Name:          tc.Name,
+				Binary:        tc.Binary,
+				Args:          tc.Args,
+				Env:           tc.Env,
+				Timeout:       cfg.Campaign.ExecTimeout.Duration,
+				MemLimitBytes: memLimit,
 			})
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error creating runner %s: %v\n", tc.Name, err)
@@ -224,8 +246,8 @@ func stopRunners(runners []runner.Runner) {
 	}
 }
 
-func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debugEdge bool) {
-	harness, servers := buildRunners(cfg)
+func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debugEdge bool, memLimit uint64) {
+	harness, servers := buildRunners(cfg, memLimit)
 
 	var comp compare.Comparator
 	switch cfg.Comparator.Type {
@@ -269,7 +291,7 @@ func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debug
 }
 
 func cmdReduce(cfg *config.Config, outDir string, validate int) {
-	harness, servers := buildRunners(cfg)
+	harness, servers := buildRunners(cfg, 0)
 	all := allRunners(harness, servers)
 	startRunners(all)
 	defer stopRunners(all)
@@ -303,7 +325,7 @@ func cmdReduce(cfg *config.Config, outDir string, validate int) {
 }
 
 func cmdAnalyze(cfg *config.Config, payload string, payloadPath string) {
-	harness, servers := buildRunners(cfg)
+	harness, servers := buildRunners(cfg, 0)
 	all := allRunners(harness, servers)
 	startRunners(all)
 	defer stopRunners(all)
@@ -393,4 +415,30 @@ func cmdAnalyze(cfg *config.Config, payload string, payloadPath string) {
 		}
 		fmt.Println()
 	}
+}
+
+// parseBytes parses a human-readable byte count with optional suffix:
+// K/k = kibibytes, M/m = mebibytes, G/g = gibibytes. Returns 0 for "0" or "".
+func parseBytes(s string) (uint64, error) {
+	if s == "" || s == "0" {
+		return 0, nil
+	}
+	mult := uint64(1)
+	trimmed := s
+	switch last := s[len(s)-1]; last {
+	case 'K', 'k':
+		mult = 1 << 10
+		trimmed = s[:len(s)-1]
+	case 'M', 'm':
+		mult = 1 << 20
+		trimmed = s[:len(s)-1]
+	case 'G', 'g':
+		mult = 1 << 30
+		trimmed = s[:len(s)-1]
+	}
+	n, err := strconv.ParseUint(trimmed, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid size %q: must be a number with optional K/M/G suffix", s)
+	}
+	return n * mult, nil
 }
