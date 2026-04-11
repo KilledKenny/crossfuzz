@@ -112,10 +112,7 @@ func main() {
 		if isFlagSet(fs, "findings") || cfg.Corpus.FindingsDir == "" {
 			cfg.Corpus.FindingsDir = *findingsFlag
 		}
-		if *buildFlag {
-			cmdBuild(cfg)
-		}
-		cmdRun(cfg, *warmupFlag, *validateFlag, *maxFindingsFlag, *debugEdgeFlag, memLimit, *workersFlag)
+		cmdRun(cfg, *warmupFlag, *validateFlag, *maxFindingsFlag, *debugEdgeFlag, memLimit, *workersFlag, *buildFlag)
 	case "reduce":
 		if *buildFlag {
 			cmdBuild(cfg)
@@ -183,7 +180,8 @@ func cmdBuild(cfg *config.Config) {
 	fmt.Println("Build complete.")
 }
 
-func buildRunners(cfg *config.Config, memLimit uint64) ([]runner.Runner, []*runner.ServerProcess) {
+func buildRunners(cfg *config.Config, memLimit uint64, workerID int) ([]runner.Runner, []*runner.ServerProcess) {
+	workerEnv := []string{fmt.Sprintf("CROSSFUZZ_ID=%d", workerID)}
 	var harness []runner.Runner
 	var servers []*runner.ServerProcess
 	for _, tc := range cfg.Targets {
@@ -192,7 +190,7 @@ func buildRunners(cfg *config.Config, memLimit uint64) ([]runner.Runner, []*runn
 				Name:   tc.Name,
 				Binary: tc.Binary,
 				Args:   tc.Args,
-				Env:    tc.Env,
+				Env:    append(workerEnv, tc.Env...),
 			})
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error creating server runner %s: %v\n", tc.Name, err)
@@ -204,7 +202,7 @@ func buildRunners(cfg *config.Config, memLimit uint64) ([]runner.Runner, []*runn
 				Name:          tc.Name,
 				Binary:        tc.Binary,
 				Args:          tc.Args,
-				Env:           tc.Env,
+				Env:           append(workerEnv, tc.Env...),
 				Timeout:       cfg.Campaign.ExecTimeout.Duration,
 				MemLimitBytes: memLimit,
 			})
@@ -248,10 +246,15 @@ func stopRunners(runners []runner.Runner) {
 	}
 }
 
-func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debugEdge bool, memLimit uint64, numWorkers int) {
+func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debugEdge bool, memLimit uint64, numWorkers int, build bool) {
 	if numWorkers < 1 {
 		fmt.Fprintf(os.Stderr, "--workers must be at least 1\n")
 		os.Exit(1)
+	}
+
+	// Build targets once before spawning any workers.
+	if build {
+		cmdBuild(cfg)
 	}
 
 	var comp compare.Comparator
@@ -281,7 +284,7 @@ func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debug
 	workerSets := make([]engine.WorkerRunners, numWorkers)
 	var allFlat []runner.Runner
 	for i := range workerSets {
-		harness, servers := buildRunners(cfg, memLimit)
+		harness, servers := buildRunners(cfg, memLimit, i)
 		workerSets[i] = engine.WorkerRunners{Harness: harness, Servers: servers}
 		allFlat = append(allFlat, allRunners(harness, servers)...)
 	}
@@ -304,7 +307,7 @@ func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debug
 }
 
 func cmdReduce(cfg *config.Config, outDir string, validate int) {
-	harness, servers := buildRunners(cfg, 0)
+	harness, servers := buildRunners(cfg, 0, 0)
 	all := allRunners(harness, servers)
 	startRunners(all)
 	defer stopRunners(all)
@@ -338,7 +341,7 @@ func cmdReduce(cfg *config.Config, outDir string, validate int) {
 }
 
 func cmdAnalyze(cfg *config.Config, payload string, payloadPath string) {
-	harness, servers := buildRunners(cfg, 0)
+	harness, servers := buildRunners(cfg, 0, 0)
 	all := allRunners(harness, servers)
 	startRunners(all)
 	defer stopRunners(all)
