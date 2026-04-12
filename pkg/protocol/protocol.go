@@ -9,23 +9,27 @@ import (
 
 // Message types.
 const (
-	TypePing         = "ping"
-	TypePong         = "pong"
-	TypeFuzz         = "fuzz"
-	TypeFuzzResult   = "fuzz_result"
-	TypeFilter       = "filter"
-	TypeFilterResult = "filter_result"
-	TypeShutdown     = "shutdown"
-	TypeReady        = "ready"
+	TypePing          = "ping"
+	TypePong          = "pong"
+	TypeFuzz          = "fuzz"
+	TypeFuzzResult    = "fuzz_result"
+	TypeFilter        = "filter"
+	TypeFilterResult  = "filter_result"
+	TypeCompare       = "compare"
+	TypeCompareResult = "compare_result"
+	TypeShutdown      = "shutdown"
+	TypeReady         = "ready"
 )
 
 // Message is the wire protocol message exchanged between coordinator and workers.
 type Message struct {
-	Type      string `json:"type"`
-	TimeoutMS int    `json:"timeout_ms,omitempty"`
-	OK        bool   `json:"ok,omitempty"`
-	Error     string `json:"error,omitempty"`
-	ExecNS    int64  `json:"exec_ns,omitempty"`
+	Type      string   `json:"type"`
+	TimeoutMS int      `json:"timeout_ms,omitempty"`
+	OK        bool     `json:"ok,omitempty"`
+	Rejected  bool     `json:"rejected,omitempty"`
+	Error     string   `json:"error,omitempty"`
+	ExecNS    int64    `json:"exec_ns,omitempty"`
+	Targets   []string `json:"targets,omitempty"`
 }
 
 // Encode writes a length-prefixed JSON message to w.

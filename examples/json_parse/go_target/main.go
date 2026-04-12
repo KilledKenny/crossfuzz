@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"strings"
 
-	"crossfuzz/harness/gofuzz"
+	"crossfuzz/harness/go"
 )
 
 func exerciseCoverage() int {
@@ -81,5 +81,5 @@ func target(data []byte) ([]byte, error) {
 }
 
 func main() {
-	gofuzz.Run(target)
+	crossfuzz.Fuzz(target)
 }

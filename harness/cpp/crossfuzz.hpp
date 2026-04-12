@@ -2,37 +2,40 @@
 
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <span>
+#include <string>
+#include <utility>
 #include <vector>
 
 namespace crossfuzz {
 
-using FuzzFn = std::function<std::vector<uint8_t>(std::span<const uint8_t>)>;
-
-namespace detail {
-// Trampoline state: one fuzz function registered per process.
-extern FuzzFn g_fuzz_fn;
-} // namespace detail
-
 struct Settings {
-    /**
-     * When true, coverage data is not written to the shared memory bitmap.
-     * Use this when the harness is only a trigger and coverage should come
-     * entirely from instrumented server targets.
-     */
-    bool disable_instrumentation = false;
+    bool instrument = true;
+    int warmup = 0;
+    bool transform = false;
+    bool hinting = false;
 };
 
-/*
- * Run the fuzzing harness loop. Call from main().
- *
- * The provided function receives the fuzz input and returns the output.
- * Throw any exception to signal an error for the current iteration;
- * the harness will report it as a non-zero status and continue.
- *
- * Internally delegates to the C harness crossfuzz_run_ex(); compile with
- * both crossfuzz.c and crossfuzz.cpp from harness/cpp/.
- */
-int run(FuzzFn fn, Settings settings = {});
+using FuzzFn = std::function<std::vector<uint8_t>(std::span<const uint8_t>)>;
+
+using FilterFn = std::function<std::pair<std::vector<uint8_t>, bool>(
+    std::span<const uint8_t>)>;
+
+using CompareFn = std::function<std::string(
+    std::span<const uint8_t> input,
+    const std::vector<std::string>& target_names,
+    const std::vector<std::vector<uint8_t>>& target_outputs)>;
+
+int fuzz(FuzzFn fn, Settings settings = {});
+int filter(FilterFn fn, Settings settings = {});
+int compare(CompareFn fn, Settings settings = {});
+
+// Standalone functions
+int openShm();
+int startInstrumentation();
+void clearInstrumentation();
+void collectInstrumentation();
+void setStatus(uint32_t status);
 
 } // namespace crossfuzz

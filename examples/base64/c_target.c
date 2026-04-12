@@ -5,8 +5,8 @@
 static const char B64[] =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-int crossfuzz_target(const uint8_t *data, size_t size,
-                     uint8_t *out, size_t *out_size)
+static int target(const uint8_t *data, size_t size,
+                  uint8_t *out, size_t *out_size)
 {
     size_t out_len = 4 * ((size + 2) / 3);
     *out_size = out_len;
@@ -37,5 +37,5 @@ int crossfuzz_target(const uint8_t *data, size_t size,
 
 int main(void)
 {
-    return crossfuzz_run();
+    return crossfuzz_fuzz(target, NULL);
 }

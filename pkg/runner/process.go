@@ -63,7 +63,8 @@ func NewProcess(cfg ProcessConfig) (*Process, error) {
 	return &Process{cfg: cfg, shm: shm}, nil
 }
 
-func (p *Process) Name() string { return p.cfg.Name }
+func (p *Process) Name() string    { return p.cfg.Name }
+func (p *Process) SHMPath() string { return p.shm.Path() }
 
 // Start launches the target process and waits for its "ready" handshake.
 func (p *Process) Start() error {

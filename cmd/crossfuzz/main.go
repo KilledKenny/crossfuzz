@@ -187,6 +187,16 @@ func cmdBuild(cfg *config.Config) {
 			os.Exit(1)
 		}
 	}
+	if cfg.Comparator.BuildCmd != "" {
+		fmt.Printf("Building comparator: %s\n", cfg.Comparator.BuildCmd)
+		cmd := exec.Command("sh", "-c", cfg.Comparator.BuildCmd)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "Build failed for comparator: %v\n", err)
+			os.Exit(1)
+		}
+	}
 	fmt.Println("Build complete.")
 }
 
@@ -267,6 +277,35 @@ func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debug
 		cmdBuild(cfg)
 	}
 
+	// Build one independent set of target processes per worker.
+	workerSets := make([]engine.WorkerRunners, numWorkers)
+	var allFlat []runner.Runner
+	for i := range workerSets {
+		harness, servers := buildRunners(cfg, memLimit, i)
+		workerSets[i] = engine.WorkerRunners{Harness: harness, Servers: servers}
+		allFlat = append(allFlat, allRunners(harness, servers)...)
+	}
+
+	startRunners(allFlat)
+	defer stopRunners(allFlat)
+
+	// Collect SHM paths from the first worker set (all workers have the same
+	// target names; the comparator only needs one set of paths).
+	targetSHMs := make(map[string]string)
+	if len(workerSets) > 0 {
+		ws := workerSets[0]
+		for _, r := range ws.Harness {
+			if p := r.SHMPath(); p != "" {
+				targetSHMs[r.Name()] = p
+			}
+		}
+		for _, s := range ws.Servers {
+			if p := s.SHMPath(); p != "" {
+				targetSHMs[s.Name()] = p
+			}
+		}
+	}
+
 	var comp compare.Comparator
 	switch cfg.Comparator.Type {
 	case "byte_equal", "":
@@ -285,22 +324,32 @@ func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debug
 			os.Exit(1)
 		}
 		comp = compare.Custom{Script: cfg.Comparator.Script}
+	case "harness":
+		if cfg.Comparator.Binary == "" {
+			fmt.Fprintf(os.Stderr, "Comparator type 'harness' requires a binary path\n")
+			os.Exit(1)
+		}
+		cmpProc, err := runner.NewCompareProcess(runner.ProcessConfig{
+			Name:   "comparator",
+			Binary: cfg.Comparator.Binary,
+			Args:   cfg.Comparator.Args,
+			Env:    cfg.Comparator.Env,
+		}, targetSHMs)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating comparator: %v\n", err)
+			os.Exit(1)
+		}
+		if err := cmpProc.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error starting comparator: %v\n", err)
+			os.Exit(1)
+		}
+		defer cmpProc.Stop()
+		fmt.Println("Started comparator harness.")
+		comp = compare.Harness{Proc: cmpProc}
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown comparator type: %s\n", cfg.Comparator.Type)
 		os.Exit(1)
 	}
-
-	// Build one independent set of target processes per worker.
-	workerSets := make([]engine.WorkerRunners, numWorkers)
-	var allFlat []runner.Runner
-	for i := range workerSets {
-		harness, servers := buildRunners(cfg, memLimit, i)
-		workerSets[i] = engine.WorkerRunners{Harness: harness, Servers: servers}
-		allFlat = append(allFlat, allRunners(harness, servers)...)
-	}
-
-	startRunners(allFlat)
-	defer stopRunners(allFlat)
 
 	// Start the input filter process if configured.
 	var filter *runner.FilterProcess
@@ -311,7 +360,7 @@ func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debug
 			Binary: cfg.InputFilter.Binary,
 			Args:   cfg.InputFilter.Args,
 			Env:    cfg.InputFilter.Env,
-		})
+		}, cfg.InputFilter.Transform)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error creating input filter: %v\n", err)
 			os.Exit(1)

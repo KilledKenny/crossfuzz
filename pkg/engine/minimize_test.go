@@ -15,9 +15,10 @@ type mockRunner struct {
 	execFn func(input []byte) []byte
 }
 
-func (m *mockRunner) Name() string { return m.name }
-func (m *mockRunner) Start() error { return nil }
-func (m *mockRunner) Stop() error  { return nil }
+func (m *mockRunner) Name() string    { return m.name }
+func (m *mockRunner) Start() error    { return nil }
+func (m *mockRunner) Stop() error     { return nil }
+func (m *mockRunner) SHMPath() string { return "" }
 func (m *mockRunner) Execute(input []byte) ([]byte, []byte, error) {
 	return m.execFn(input), make([]byte, 65536), nil
 }

@@ -6,7 +6,7 @@ import (
 	"io"
 	"net/http"
 
-	"crossfuzz/harness/gofuzz"
+	"crossfuzz/harness/go"
 )
 
 func echoHandler(w http.ResponseWriter, r *http.Request) {
@@ -15,14 +15,14 @@ func echoHandler(w http.ResponseWriter, r *http.Request) {
 	data := r.URL.Query().Get("data")
 	var v any
 	json.Unmarshal([]byte(data), &v)
-	gofuzz.Clear()
+	crossfuzz.Clear()
 	// Write headers
 	for name, values := range r.Header {
 		for _, v := range values {
 			fmt.Fprintf(w, "%s: %s\n", name, v)
 		}
 	}
-	gofuzz.Collect()
+	crossfuzz.Collect()
 	fmt.Fprintln(w)
 
 	// Write body
@@ -37,7 +37,7 @@ func echoHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	gofuzz.InitServer()
+	crossfuzz.InitServer()
 	http.HandleFunc("/", echoHandler)
 	http.ListenAndServe(":9000", nil)
 }

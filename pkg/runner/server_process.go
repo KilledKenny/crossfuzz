@@ -37,7 +37,8 @@ func NewServerProcess(cfg ProcessConfig) (*ServerProcess, error) {
 	}, nil
 }
 
-func (s *ServerProcess) Name() string { return s.name }
+func (s *ServerProcess) Name() string    { return s.name }
+func (s *ServerProcess) SHMPath() string { return s.shm.Path() }
 
 // Start launches the server process with CROSSFUZZ_SHM set. No pipe handshake.
 func (s *ServerProcess) Start() error {

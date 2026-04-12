@@ -19,7 +19,7 @@ public class JavaReverseProxy {
     static final HttpClient client = HttpClient.newHttpClient();
 
     public static void main(String[] args) throws Exception {
-        crossfuzz.Harness.initServer();
+        crossfuzz.Crossfuzz.initServer();
 
         int port = 8080;
 

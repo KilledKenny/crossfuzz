@@ -10,4 +10,7 @@ type Runner interface {
 	Execute(input []byte) (output []byte, coverage []byte, err error)
 	// Stop terminates the target process and cleans up resources.
 	Stop() error
+	// SHMPath returns the filesystem path to this target's shared memory file,
+	// or "" if the target does not use shared memory.
+	SHMPath() string
 }

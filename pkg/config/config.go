@@ -21,10 +21,11 @@ type Config struct {
 // The filter receives each generated input via shared memory and responds
 // with accept or reject before the input is sent to any fuzz target.
 type InputFilterConfig struct {
-	Binary   string   `toml:"binary"`
-	Args     []string `toml:"args"`
-	BuildCmd string   `toml:"build_cmd"`
-	Env      []string `toml:"env"`
+	Binary    string   `toml:"binary"`
+	Args      []string `toml:"args"`
+	BuildCmd  string   `toml:"build_cmd"`
+	Env       []string `toml:"env"`
+	Transform bool     `toml:"transform"`
 }
 
 // CampaignConfig controls the fuzzing campaign.
@@ -58,8 +59,12 @@ func (t *TargetConfig) IsServer() bool { return t.Type == "server" }
 
 // ComparatorConfig selects the output comparison strategy.
 type ComparatorConfig struct {
-	Type   string `toml:"type"`
-	Script string `toml:"script"`
+	Type     string   `toml:"type"`
+	Script   string   `toml:"script"`
+	Binary   string   `toml:"binary"`
+	Args     []string `toml:"args"`
+	BuildCmd string   `toml:"build_cmd"`
+	Env      []string `toml:"env"`
 }
 
 // Duration wraps time.Duration for TOML string unmarshaling.

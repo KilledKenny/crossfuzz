@@ -9,7 +9,7 @@
  *   bun run --preload ../../harness/js/instrument.ts ./ts_target.ts
  */
 
-import { run } from "../../harness/js/crossfuzz";
+import { fuzz } from "../../harness/js/crossfuzz";
 
 // ---- parser state ----
 
@@ -158,4 +158,4 @@ function enc(s: string): Uint8Array {
   return new TextEncoder().encode(s);
 }
 
-run(target);
+fuzz(target);

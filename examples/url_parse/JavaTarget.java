@@ -1,5 +1,4 @@
-import crossfuzz.Harness;
-import crossfuzz.Target;
+import crossfuzz.Crossfuzz;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 
@@ -9,7 +8,7 @@ import java.nio.charset.StandardCharsets;
  * Parses the input as a URL using java.net.URL and returns the normalised
  * components so they can be compared with Go's net/url output.
  */
-public class JavaTarget implements Target {
+public class JavaTarget implements Crossfuzz.FuzzTarget {
 
     @Override
     public byte[] fuzz(byte[] input) {
@@ -51,6 +50,6 @@ public class JavaTarget implements Target {
     private static String nvl(String s)   { return s == null ? "" : s; }
 
     public static void main(String[] args) throws Exception {
-        Harness.run(new JavaTarget());
+        Crossfuzz.fuzz(new JavaTarget());
     }
 }

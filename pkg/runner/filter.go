@@ -17,21 +17,24 @@ import (
 // filter message, and the filter process responds with accept or reject.
 // A mutex serialises concurrent workers through the single filter process.
 type FilterProcess struct {
-	cfg   ProcessConfig
-	cmd   *exec.Cmd
-	cmdW  io.WriteCloser
-	respR io.ReadCloser
-	shm   *coverage.SharedMem
-	mu    sync.Mutex
+	cfg       ProcessConfig
+	cmd       *exec.Cmd
+	cmdW      io.WriteCloser
+	respR     io.ReadCloser
+	shm       *coverage.SharedMem
+	transform bool // when true, read transformed input from filter's output region
+	mu        sync.Mutex
 }
 
 // NewFilterProcess creates a filter runner. Call Start() to launch it.
-func NewFilterProcess(cfg ProcessConfig) (*FilterProcess, error) {
+// If transform is true, the filter may transform accepted inputs by writing
+// to its shared memory output region.
+func NewFilterProcess(cfg ProcessConfig, transform bool) (*FilterProcess, error) {
 	shm, err := coverage.Create()
 	if err != nil {
 		return nil, fmt.Errorf("create shared memory for filter: %w", err)
 	}
-	return &FilterProcess{cfg: cfg, shm: shm}, nil
+	return &FilterProcess{cfg: cfg, shm: shm, transform: transform}, nil
 }
 
 // Start launches the filter process and waits for its ready handshake.
@@ -84,25 +87,36 @@ func (f *FilterProcess) Start() error {
 }
 
 // Filter writes input into shared memory, sends a filter command to the filter
-// process, and returns true if the process accepts the input.
-func (f *FilterProcess) Filter(input []byte) (bool, error) {
+// process, and returns whether the input was accepted. If the filter supports
+// transform mode and the input was accepted, the transformed bytes (read from
+// the filter's output region) are returned as the second value; otherwise
+// transformed is nil.
+func (f *FilterProcess) Filter(input []byte) (accepted bool, transformed []byte, err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	f.shm.WriteInput(input)
 
 	if err := protocol.Encode(f.cmdW, &protocol.Message{Type: protocol.TypeFilter}); err != nil {
-		return false, fmt.Errorf("send filter command: %w", err)
+		return false, nil, fmt.Errorf("send filter command: %w", err)
 	}
 
 	msg, err := protocol.Decode(f.respR)
 	if err != nil {
-		return false, fmt.Errorf("read filter result: %w", err)
+		return false, nil, fmt.Errorf("read filter result: %w", err)
 	}
 	if msg.Type != protocol.TypeFilterResult {
-		return false, fmt.Errorf("expected filter_result, got %s", msg.Type)
+		return false, nil, fmt.Errorf("expected filter_result, got %s", msg.Type)
 	}
-	return msg.OK, nil
+
+	if !msg.OK {
+		return false, nil, nil
+	}
+
+	if f.transform && f.shm.OutputLen() > 0 {
+		return true, f.shm.ReadOutput(), nil
+	}
+	return true, nil, nil
 }
 
 // Stop shuts down the filter process and releases all resources.

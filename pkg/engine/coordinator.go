@@ -281,7 +281,7 @@ func (c *Coordinator) runWorker(ctx context.Context, cancel context.CancelFunc, 
 
 		// Run the input filter (if configured) before sending to targets.
 		if c.filter != nil {
-			accepted, err := c.filter.Filter(input)
+			accepted, transformed, err := c.filter.Filter(input)
 			if err != nil {
 				fmt.Printf("\nFilter error: %v\n", err)
 				continue
@@ -289,6 +289,9 @@ func (c *Coordinator) runWorker(ctx context.Context, cancel context.CancelFunc, 
 			if !accepted {
 				c.stats.RecordRejected()
 				continue
+			}
+			if transformed != nil {
+				input = transformed
 			}
 		}
 

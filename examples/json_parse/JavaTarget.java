@@ -1,5 +1,4 @@
-import crossfuzz.Harness;
-import crossfuzz.Target;
+import crossfuzz.Crossfuzz;
 
 /**
  * JSON parse target for cross-language differential fuzzing.
@@ -11,7 +10,7 @@ import crossfuzz.Target;
  * Intentionally hand-rolled (no external JSON library) so that edge-case
  * handling can diverge from the C and Go implementations.
  */
-public class JavaTarget implements Target {
+public class JavaTarget implements Crossfuzz.FuzzTarget {
 
     // -----------------------------------------------------------------------
     // Parser state
@@ -189,6 +188,6 @@ public class JavaTarget implements Target {
     // -----------------------------------------------------------------------
 
     public static void main(String[] args) throws Exception {
-        Harness.run(new JavaTarget());
+        Crossfuzz.fuzz(new JavaTarget());
     }
 }

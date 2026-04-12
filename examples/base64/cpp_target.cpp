@@ -39,7 +39,7 @@ static std::vector<uint8_t> base64_encode(std::span<const uint8_t> input)
 
 int main()
 {
-    return crossfuzz::run([](std::span<const uint8_t> input) {
+    return crossfuzz::fuzz([](std::span<const uint8_t> input) {
         return base64_encode(input);
     });
 }

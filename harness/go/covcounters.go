@@ -1,4 +1,4 @@
-package gofuzz
+package crossfuzz
 
 // Parser for the binary stream produced by runtime/coverage.WriteCounters.
 //

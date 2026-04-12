@@ -150,8 +150,8 @@ static int parse_value(Parser *p, uint8_t *out, size_t *out_len) {
     return 1;
 }
 
-int crossfuzz_target(const uint8_t *data, size_t size,
-                     uint8_t *out, size_t *out_size)
+static int target(const uint8_t *data, size_t size,
+                  uint8_t *out, size_t *out_size)
 {
     Parser p = { data, size, 0 };
     uint8_t type_buf[16];
@@ -179,5 +179,5 @@ int crossfuzz_target(const uint8_t *data, size_t size,
 }
 
 int main(void) {
-    return crossfuzz_run();
+    return crossfuzz_fuzz(target, NULL);
 }

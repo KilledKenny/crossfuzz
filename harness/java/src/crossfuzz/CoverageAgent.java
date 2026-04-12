@@ -17,11 +17,11 @@ public class CoverageAgent {
                 RandomAccessFile raf = new RandomAccessFile(shmPath, "rw");
                 FileChannel ch = raf.getChannel();
                 MappedByteBuffer shm = ch.map(
-                    FileChannel.MapMode.READ_WRITE, 0, Harness.TOTAL_SHM_SIZE);
+                    FileChannel.MapMode.READ_WRITE, 0, Crossfuzz.TOTAL_SHM_SIZE);
                 ByteBuffer dup = shm.duplicate();
                 dup.order(ByteOrder.LITTLE_ENDIAN);
-                dup.position(Harness.COVERAGE_OFFSET);
-                dup.limit(Harness.COVERAGE_OFFSET + 65_536);
+                dup.position(Crossfuzz.COVERAGE_OFFSET);
+                dup.limit(Crossfuzz.COVERAGE_OFFSET + 65_536);
                 CoverageRuntime.init(dup.slice());
             } catch (Exception e) {
                 System.err.println("[crossfuzz] agent: failed to map SHM: " + e);

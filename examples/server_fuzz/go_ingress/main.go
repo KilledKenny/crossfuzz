@@ -6,11 +6,11 @@ import (
 	"net/http/httputil"
 	"net/url"
 
-	"crossfuzz/harness/gofuzz"
+	"crossfuzz/harness/go"
 )
 
 func main() {
-	gofuzz.InitServer()
+	crossfuzz.InitServer()
 
 	// Upstream server you want to proxy to
 	target, err := url.Parse("http://127.0.0.1:8080")
@@ -23,13 +23,13 @@ func main() {
 	// Optional: customize the director (request rewrite step)
 	originalDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
-		gofuzz.Collect()
+		crossfuzz.Collect()
 		originalDirector(req)
 
 		// You can tweak headers here if needed
 		req.Header.Set("X-Forwarded-Host", req.Host)
 		req.Header.Set("X-Origin-Host", target.Host)
-		gofuzz.Clear()
+		crossfuzz.Clear()
 	}
 
 	log.Println("Reverse proxy running on :8000 ->", target)

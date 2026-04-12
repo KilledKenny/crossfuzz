@@ -32,6 +32,9 @@
 #define CMD_FD  3
 #define RESP_FD 4
 
+/* Max number of targets for the compare harness */
+#define MAX_COMPARE_TARGETS 64
+
 /* ---- Globals ---- */
 
 static uint8_t *shm_base;
@@ -124,7 +127,6 @@ void __sanitizer_cov_trace_pc_guard(uint32_t *guard)
 
 static int msg_is_type(const char *json, const char *type_val)
 {
-    /* Match "type":"val" or "type": "val" */
     char pat[128];
     snprintf(pat, sizeof(pat), "\"type\":\"%s\"", type_val);
     if (strstr(json, pat)) return 1;
@@ -133,46 +135,162 @@ static int msg_is_type(const char *json, const char *type_val)
     return 0;
 }
 
-/* ---- Harness entry point ---- */
+/* ---- Minimal JSON string array parser for "targets" field ---- */
 
-int crossfuzz_run(void)
+/*
+ * Parse the "targets" array from a JSON message.
+ * Fills names[] with pointers into the msg buffer (modifies msg in-place
+ * by null-terminating strings). Returns the number of targets found.
+ */
+static int parse_targets_array(char *msg, const char **names, int max_names)
 {
-    return crossfuzz_run_ex(NULL);
+    char *p = strstr(msg, "\"targets\"");
+    if (!p) return 0;
+    p = strchr(p, '[');
+    if (!p) return 0;
+    p++; /* skip '[' */
+
+    int count = 0;
+    while (*p && *p != ']' && count < max_names) {
+        /* skip whitespace and commas */
+        while (*p == ' ' || *p == ',' || *p == '\n' || *p == '\r' || *p == '\t') p++;
+        if (*p == ']' || *p == '\0') break;
+        if (*p != '"') { p++; continue; }
+        p++; /* skip opening quote */
+        names[count] = p;
+        while (*p && *p != '"') p++;
+        if (*p == '"') { *p = '\0'; p++; }
+        count++;
+    }
+    return count;
 }
 
-int crossfuzz_run_ex(const crossfuzz_settings_t *settings)
+/* ---- Minimal JSON map parser for CROSSFUZZ_SHM_TARGETS ---- */
+
+typedef struct {
+    char name[256];
+    char path[1024];
+    uint8_t *data;
+} target_shm_entry_t;
+
+/*
+ * Parse {"key":"value",...} from env_str. Returns count of entries parsed.
+ * Entries are written to entries[]. env_str is modified in-place.
+ */
+static int parse_shm_targets(char *env_str, target_shm_entry_t *entries, int max_entries)
+{
+    int count = 0;
+    char *p = env_str;
+
+    /* skip opening brace */
+    while (*p && *p != '{') p++;
+    if (*p == '{') p++;
+
+    while (*p && *p != '}' && count < max_entries) {
+        /* skip whitespace and commas */
+        while (*p == ' ' || *p == ',' || *p == '\n' || *p == '\r' || *p == '\t') p++;
+        if (*p == '}' || *p == '\0') break;
+
+        /* parse key */
+        if (*p != '"') { p++; continue; }
+        p++;
+        char *key_start = p;
+        while (*p && *p != '"') p++;
+        if (*p == '"') { *p = '\0'; p++; }
+
+        /* skip colon */
+        while (*p == ' ' || *p == ':') p++;
+
+        /* parse value */
+        if (*p != '"') { p++; continue; }
+        p++;
+        char *val_start = p;
+        while (*p && *p != '"') p++;
+        if (*p == '"') { *p = '\0'; p++; }
+
+        snprintf(entries[count].name, sizeof(entries[count].name), "%s", key_start);
+        snprintf(entries[count].path, sizeof(entries[count].path), "%s", val_start);
+        entries[count].data = NULL;
+        count++;
+    }
+    return count;
+}
+
+/* ---- Standalone functions ---- */
+
+int crossfuzz_open_shm(void)
 {
     const char *shm_path = getenv("CROSSFUZZ_SHM");
     if (!shm_path) {
         fprintf(stderr, "crossfuzz: CROSSFUZZ_SHM not set\n");
-        return 1;
+        return -1;
     }
 
     int fd = open(shm_path, O_RDWR);
     if (fd < 0) {
         perror("crossfuzz: open shm");
-        return 1;
+        return -1;
     }
     shm_base = (uint8_t *)mmap(NULL, TOTAL_SHM_SIZE,
                                 PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     close(fd);
     if (shm_base == MAP_FAILED) {
+        shm_base = NULL;
         perror("crossfuzz: mmap");
-        return 1;
+        return -1;
+    }
+    return 0;
+}
+
+int crossfuzz_start_instrumentation(void)
+{
+    if (!shm_base) return -1;
+    cov_bitmap = shm_base + COVERAGE_OFFSET;
+    return 0;
+}
+
+void crossfuzz_clear_instrumentation(void)
+{
+    if (cov_bitmap)
+        memset(cov_bitmap, 0, COVERAGE_SIZE);
+}
+
+void crossfuzz_collect_instrumentation(void)
+{
+    /* No-op for C: SanitizerCoverage writes directly to the bitmap. */
+}
+
+void crossfuzz_set_status(uint32_t status)
+{
+    if (shm_base)
+        shm_set_u32(OFF_STATUS, status);
+}
+
+/* ---- Helper: resolve settings with defaults ---- */
+
+static crossfuzz_settings_t resolve_settings(const crossfuzz_settings_t *settings)
+{
+    if (settings) return *settings;
+    return crossfuzz_default_settings();
+}
+
+/* ---- Fuzz entry point ---- */
+
+int crossfuzz_fuzz(crossfuzz_fuzz_fn fn, const crossfuzz_settings_t *settings)
+{
+    crossfuzz_settings_t s = resolve_settings(settings);
+
+    if (crossfuzz_open_shm() < 0) return 1;
+
+    if (s.instrument) {
+        crossfuzz_start_instrumentation();
     }
 
-    /* When instrumentation is disabled, leave cov_bitmap NULL so that the
-     * __sanitizer_cov_trace_pc_guard callback becomes a no-op. */
-    if (!settings || !settings->disable_instrumentation)
-        cov_bitmap = shm_base + COVERAGE_OFFSET;
-
-    /* Handshake: tell coordinator we're ready. */
     if (proto_write(RESP_FD, "{\"type\":\"ready\"}") < 0) {
         fprintf(stderr, "crossfuzz: failed to send ready\n");
         return 1;
     }
 
-    /* Persistent-mode loop. */
     for (;;) {
         char *msg = proto_read(CMD_FD);
         if (!msg) break;
@@ -191,8 +309,7 @@ int crossfuzz_run_ex(const crossfuzz_settings_t *settings)
             uint8_t *out_buf = shm_base + OUTPUT_OFFSET;
             size_t out_len = 0;
 
-            int ret = crossfuzz_target(shm_base + INPUT_OFFSET, in_len,
-                                       out_buf, &out_len);
+            int ret = fn(shm_base + INPUT_OFFSET, in_len, out_buf, &out_len);
 
             if (out_len > OUTPUT_SIZE) out_len = OUTPUT_SIZE;
             shm_set_u32(OFF_OUTPUT_LEN, (uint32_t)out_len);
@@ -210,5 +327,220 @@ int crossfuzz_run_ex(const crossfuzz_settings_t *settings)
     }
 
     munmap(shm_base, TOTAL_SHM_SIZE);
+    return 0;
+}
+
+/* ---- Filter entry point ---- */
+
+int crossfuzz_filter(crossfuzz_filter_fn fn, const crossfuzz_settings_t *settings)
+{
+    crossfuzz_settings_t s = resolve_settings(settings);
+
+    if (crossfuzz_open_shm() < 0) return 1;
+
+    /* Filters typically don't need coverage instrumentation, but respect
+     * the setting in case the user wants it. */
+    if (s.instrument) {
+        crossfuzz_start_instrumentation();
+    }
+
+    if (proto_write(RESP_FD, "{\"type\":\"ready\"}") < 0) {
+        fprintf(stderr, "crossfuzz: failed to send ready\n");
+        return 1;
+    }
+
+    for (;;) {
+        char *msg = proto_read(CMD_FD);
+        if (!msg) break;
+
+        if (msg_is_type(msg, "shutdown")) {
+            free(msg);
+            break;
+        }
+
+        if (msg_is_type(msg, "filter")) {
+            free(msg);
+
+            uint32_t in_len = shm_get_u32(OFF_INPUT_LEN);
+            if (in_len > INPUT_SIZE) in_len = INPUT_SIZE;
+
+            uint8_t *out_buf = shm_base + OUTPUT_OFFSET;
+            size_t out_len = 0;
+            int accepted = 0;
+
+            int ret = fn(shm_base + INPUT_OFFSET, in_len, out_buf, &out_len, &accepted);
+
+            if (ret != 0) accepted = 0;
+
+            if (accepted) {
+                if (s.transform && out_len > 0) {
+                    if (out_len > OUTPUT_SIZE) out_len = OUTPUT_SIZE;
+                    shm_set_u32(OFF_OUTPUT_LEN, (uint32_t)out_len);
+                } else {
+                    /* Copy input to output region as-is. */
+                    if (in_len > OUTPUT_SIZE) in_len = OUTPUT_SIZE;
+                    memcpy(shm_base + OUTPUT_OFFSET, shm_base + INPUT_OFFSET, in_len);
+                    shm_set_u32(OFF_OUTPUT_LEN, in_len);
+                }
+                proto_write(RESP_FD, "{\"type\":\"filter_result\",\"ok\":true}");
+            } else {
+                shm_set_u32(OFF_OUTPUT_LEN, 0);
+                proto_write(RESP_FD, "{\"type\":\"filter_result\",\"ok\":false}");
+            }
+        } else {
+            free(msg);
+        }
+    }
+
+    munmap(shm_base, TOTAL_SHM_SIZE);
+    return 0;
+}
+
+/* ---- Compare entry point ---- */
+
+int crossfuzz_compare(crossfuzz_compare_fn fn, const crossfuzz_settings_t *settings)
+{
+    (void)settings; /* compare ignores settings currently */
+
+    /* Parse CROSSFUZZ_SHM_TARGETS to get target SHM paths. */
+    const char *targets_env = getenv("CROSSFUZZ_SHM_TARGETS");
+    if (!targets_env) {
+        fprintf(stderr, "crossfuzz: CROSSFUZZ_SHM_TARGETS not set\n");
+        return 1;
+    }
+
+    /* Make a mutable copy for parsing. */
+    size_t env_len = strlen(targets_env);
+    char *env_copy = (char *)malloc(env_len + 1);
+    if (!env_copy) return 1;
+    memcpy(env_copy, targets_env, env_len + 1);
+
+    target_shm_entry_t entries[MAX_COMPARE_TARGETS];
+    int num_targets = parse_shm_targets(env_copy, entries, MAX_COMPARE_TARGETS);
+    free(env_copy);
+
+    if (num_targets == 0) {
+        fprintf(stderr, "crossfuzz: no targets found in CROSSFUZZ_SHM_TARGETS\n");
+        return 1;
+    }
+
+    /* mmap each target's SHM read-only. */
+    for (int i = 0; i < num_targets; i++) {
+        int fd = open(entries[i].path, O_RDONLY);
+        if (fd < 0) {
+            fprintf(stderr, "crossfuzz: open target SHM %s (%s): ", entries[i].name, entries[i].path);
+            perror("");
+            return 1;
+        }
+        entries[i].data = (uint8_t *)mmap(NULL, TOTAL_SHM_SIZE,
+                                           PROT_READ, MAP_SHARED, fd, 0);
+        close(fd);
+        if (entries[i].data == MAP_FAILED) {
+            fprintf(stderr, "crossfuzz: mmap target SHM %s: ", entries[i].name);
+            perror("");
+            return 1;
+        }
+    }
+
+    if (proto_write(RESP_FD, "{\"type\":\"ready\"}") < 0) {
+        fprintf(stderr, "crossfuzz: failed to send ready\n");
+        return 1;
+    }
+
+    /* Reusable arrays for the callback. */
+    const char *cb_names[MAX_COMPARE_TARGETS];
+    const uint8_t *cb_outputs[MAX_COMPARE_TARGETS];
+    size_t cb_output_sizes[MAX_COMPARE_TARGETS];
+
+    for (;;) {
+        char *msg = proto_read(CMD_FD);
+        if (!msg) break;
+
+        if (msg_is_type(msg, "shutdown")) {
+            free(msg);
+            break;
+        }
+
+        if (msg_is_type(msg, "compare")) {
+            /* Parse requested target names from the message. */
+            const char *req_names[MAX_COMPARE_TARGETS];
+            int num_req = parse_targets_array(msg, req_names, MAX_COMPARE_TARGETS);
+
+            /* Read input from the first matched target's SHM. */
+            const uint8_t *input = NULL;
+            size_t input_size = 0;
+            int cb_count = 0;
+
+            for (int r = 0; r < num_req; r++) {
+                /* Find this target in our entries. */
+                for (int e = 0; e < num_targets; e++) {
+                    if (strcmp(req_names[r], entries[e].name) == 0) {
+                        uint8_t *base = entries[e].data;
+
+                        if (!input) {
+                            uint32_t ilen;
+                            memcpy(&ilen, base + OFF_INPUT_LEN, 4);
+                            if (ilen > INPUT_SIZE) ilen = INPUT_SIZE;
+                            input = base + INPUT_OFFSET;
+                            input_size = ilen;
+                        }
+
+                        uint32_t olen;
+                        memcpy(&olen, base + OFF_OUTPUT_LEN, 4);
+                        if (olen > OUTPUT_SIZE) olen = OUTPUT_SIZE;
+
+                        cb_names[cb_count] = entries[e].name;
+                        cb_outputs[cb_count] = base + OUTPUT_OFFSET;
+                        cb_output_sizes[cb_count] = olen;
+                        cb_count++;
+                        break;
+                    }
+                }
+            }
+
+            const char *mismatch = fn(input, input_size, cb_count,
+                                      cb_names, cb_outputs, cb_output_sizes);
+
+            free(msg);
+
+            if (mismatch && mismatch[0] != '\0') {
+                /* Build response with error. We need to escape the mismatch
+                 * string for JSON, but for simplicity we just truncate at
+                 * any quote character. */
+                char resp[4096];
+                char escaped[2048];
+                size_t j = 0;
+                for (size_t i = 0; mismatch[i] && j < sizeof(escaped) - 2; i++) {
+                    if (mismatch[i] == '"') {
+                        escaped[j++] = '\\';
+                        escaped[j++] = '"';
+                    } else if (mismatch[i] == '\\') {
+                        escaped[j++] = '\\';
+                        escaped[j++] = '\\';
+                    } else if (mismatch[i] == '\n') {
+                        escaped[j++] = '\\';
+                        escaped[j++] = 'n';
+                    } else {
+                        escaped[j++] = mismatch[i];
+                    }
+                }
+                escaped[j] = '\0';
+                snprintf(resp, sizeof(resp),
+                    "{\"type\":\"compare_result\",\"error\":\"%s\"}", escaped);
+                proto_write(RESP_FD, resp);
+            } else {
+                proto_write(RESP_FD, "{\"type\":\"compare_result\"}");
+            }
+        } else {
+            free(msg);
+        }
+    }
+
+    /* Cleanup target mmaps. */
+    for (int i = 0; i < num_targets; i++) {
+        if (entries[i].data && entries[i].data != MAP_FAILED)
+            munmap(entries[i].data, TOTAL_SHM_SIZE);
+    }
+
     return 0;
 }
