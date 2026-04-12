@@ -18,6 +18,11 @@ harness/java/build/libs/crossfuzz.jar: $(JAVA_HARNES_INPUT)
 	cd ./harness/java && gradle jar
 
 
+HARNESS_TARGET+= harness/python/.deps_installed
+harness/python/.deps_installed: harness/python/.venv/bin/python3 harness/python/requirements.txt
+	harness/python/.venv/bin/pip install --quiet -r harness/python/requirements.txt
+	touch $@
+
 HARNESS_TARGET+= harness/rust/target/release/libcrossfuzz_harness.rlib
 harness/rust/target/release/libcrossfuzz_harness.rlib: harness/rust/Cargo.toml $(wildcard harness/rust/src/*.rs)
 	cd harness/rust && cargo build --release

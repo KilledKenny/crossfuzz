@@ -43,6 +43,12 @@ args = ["run", "--preload", "../../harness/js/instrument.ts", "./target_ts.ts"]
 build_cmd = "cd ../../harness/js && bun install"
 
 [[target]]
+name = "python_base64"
+language = "python"
+binary = "../../harness/python/.venv/bin/python3"
+args = ["./python_target.py"]
+
+[[target]]
 name = "rust_base64"
 language = "rust"
 binary = "./rust_target/target/release/rust_base64"

@@ -25,6 +25,7 @@ You never touch pipes or shared memory directly.
 | Go | `crossfuzz-harness-go` | Easy to use; needs `-cover` build flag and coverpkg list |
 | Java | `crossfuzz-harness-java` | JVM startup hidden by persistent mode; needs `-javaagent` |
 | JS/TS | `crossfuzz-harness-js` | Runs under Bun; Istanbul-based coverage |
+| Python | `crossfuzz-harness-python` | Branch-arc coverage via the `coverage` library; needs `pip install coverage` |
 | Rust | `crossfuzz-harness-rust` | SanitizerCoverage via rustc LLVM flags; needs RUSTFLAGS at build time |
 
 Pick the language your target implementation is already in.
