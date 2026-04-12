@@ -42,5 +42,11 @@ binary = "bun"
 args = ["run", "--preload", "../../harness/js/instrument.ts", "./target_ts.ts"]
 build_cmd = "cd ../../harness/js && bun install"
 
+[[target]]
+name = "rust_base64"
+language = "rust"
+binary = "./rust_target/target/release/rust_base64"
+build_cmd = "cd rust_target && cargo rustc --release -- -C passes=sancov-module -C llvm-args=-sanitizer-coverage-level=3 -C llvm-args=-sanitizer-coverage-trace-pc-guard"
+
 [comparator]
 type = "byte_equal"

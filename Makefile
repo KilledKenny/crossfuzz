@@ -18,6 +18,10 @@ harness/java/build/libs/crossfuzz.jar: $(JAVA_HARNES_INPUT)
 	cd ./harness/java && gradle jar
 
 
+HARNESS_TARGET+= harness/rust/target/release/libcrossfuzz_harness.rlib
+harness/rust/target/release/libcrossfuzz_harness.rlib: harness/rust/Cargo.toml $(wildcard harness/rust/src/*.rs)
+	cd harness/rust && cargo build --release
+
 HARNESS_TARGET+= harness/js/node_modules
 harness/js/node_modules: harness/js/package.json harness/js/bun.lock
 	cd harness/js && bun install

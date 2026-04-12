@@ -1,0 +1,12 @@
+[package]
+name = "crossfuzz-harness"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "crossfuzz_harness"
+crate-type = ["rlib"]
+
+[dependencies]
+libc = "0.2"
+serde_json = { version = "1", default-features = false, features = ["std"] }
