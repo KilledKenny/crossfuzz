@@ -5,14 +5,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
+# Build everyting coordinator + all buildable harness
+make
+
 # Build the coordinator binary
 make bin/crossfuzz
 
 # Run all tests (currently only Go tests)
 make test
-
-# Run a single Go test package
-go test ./pkg/engine/...
 
 # Build Java & JS harnesses
 make harness
