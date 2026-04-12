@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -40,6 +41,7 @@ func usage() {
 	fmt.Fprintf(os.Stderr, "  --corpus-reduced=DIR    Output directory for reduced corpus (reduce command only, default: corpus-reduced)\n")
 	fmt.Fprintf(os.Stderr, "  --workers=N             Number of parallel fuzzing workers, each with their own target processes (default: 1)\n")
 	fmt.Fprintf(os.Stderr, "  --debug-edge            Print per-target edge counts in status ticker (run command only)\n")
+	fmt.Fprintf(os.Stderr, "  --log-file=PATH         Also write all stdout output to this file (run command only)\n")
 	fmt.Fprintf(os.Stderr, "  --payload=STRING        Payload bytes to send (analyze command only)\n")
 	fmt.Fprintf(os.Stderr, "  --payload-path=PATH     File or directory of payloads to send (analyze command only)\n")
 }
@@ -63,6 +65,7 @@ func main() {
 	findingsFlag := fs.String("findings", "findings", "Directory for saving findings (run command only)")
 	corpusReducedFlag := fs.String("corpus-reduced", "corpus-reduced", "Output directory for reduced corpus (reduce command only)")
 	debugEdgeFlag := fs.Bool("debug-edge", false, "Print per-target edge counts in status ticker (run command only)")
+	logFileFlag := fs.String("log-file", "", "Also write all stdout output to this file (run command only)")
 	workersFlag := fs.Int("workers", 1, "Number of parallel fuzzing workers, each with their own target processes (run command only)")
 	payloadFlag := fs.String("payload", "", "Payload string to send to all targets (analyze command only)")
 	payloadPathFlag := fs.String("payload-path", "", "File or directory of payloads to send (analyze command only)")
@@ -112,7 +115,7 @@ func main() {
 		if isFlagSet(fs, "findings") || cfg.Corpus.FindingsDir == "" {
 			cfg.Corpus.FindingsDir = *findingsFlag
 		}
-		cmdRun(cfg, *warmupFlag, *validateFlag, *maxFindingsFlag, *debugEdgeFlag, memLimit, *workersFlag, *buildFlag)
+		cmdRun(cfg, *warmupFlag, *validateFlag, *maxFindingsFlag, *debugEdgeFlag, memLimit, *workersFlag, *buildFlag, *logFileFlag)
 	case "reduce":
 		if *buildFlag {
 			cmdBuild(cfg)
@@ -266,11 +269,46 @@ func stopRunners(runners []runner.Runner) {
 	}
 }
 
-func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debugEdge bool, memLimit uint64, numWorkers int, build bool) {
+// setupLogFile redirects os.Stdout to a tee that writes to both the original
+// stdout and the named file. The returned cleanup function must be called
+// (typically via defer) to flush and close the log file.
+func setupLogFile(path string) func() {
+	if path == "" {
+		return func() {}
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error opening log file %q: %v\n", path, err)
+		os.Exit(1)
+	}
+	r, w, err := os.Pipe()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating log pipe: %v\n", err)
+		os.Exit(1)
+	}
+	origStdout := os.Stdout
+	os.Stdout = w
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		io.Copy(io.MultiWriter(origStdout, f), r) //nolint:errcheck
+	}()
+	return func() {
+		w.Close()
+		<-done
+		r.Close()
+		f.Close()
+	}
+}
+
+func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debugEdge bool, memLimit uint64, numWorkers int, build bool, logFile string) {
 	if numWorkers < 1 {
 		fmt.Fprintf(os.Stderr, "--workers must be at least 1\n")
 		os.Exit(1)
 	}
+
+	cleanup := setupLogFile(logFile)
+	defer cleanup()
 
 	// Build targets once before spawning any workers.
 	if build {
