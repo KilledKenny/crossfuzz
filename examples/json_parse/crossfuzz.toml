@@ -9,11 +9,11 @@ seed_dir = "./seeds"
 cache_dir = "./cache"
 findings_dir = "./findings"
 
-#[[target]]
-#name = "c_json"
-#language = "c"
-#binary = "./c_target"
-#build_cmd = "clang-19 -fsanitize-coverage=trace-pc-guard -O2 -I ../../harness/c -o c_target c_target.c ../../harness/c/crossfuzz.c"
+[[target]]
+name = "c_json"
+language = "c"
+binary = "./c_target"
+build_cmd = "clang-19 -fsanitize-coverage=trace-pc-guard -O2 -I ../../harness/c -o c_target c_target.c ../../harness/c/crossfuzz.c && patchelf --set-interpreter $(patchelf --print-interpreter $(which ls)) c_target"
 
 [[target]]
 name = "go_json"
