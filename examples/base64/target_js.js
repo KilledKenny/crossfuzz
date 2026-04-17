@@ -8,7 +8,7 @@
  *   bun run --preload ../../harness/js/instrument.ts ./target.ts
  */
 
-import { run } from "../../harness/js/crossfuzz";
+import { fuzz } from "../../harness/js/crossfuzz";
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
@@ -39,4 +39,4 @@ function base64Encode(input) {
   return out;
 }
 
-run(base64Encode);
+fuzz(base64Encode);
