@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -15,138 +14,202 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"crossfuzz/pkg/compare"
 	"crossfuzz/pkg/config"
 	"crossfuzz/pkg/engine"
 	"crossfuzz/pkg/runner"
 )
 
-func usage() {
-	fmt.Fprintf(os.Stderr, "Usage: crossfuzz <command> <config.toml> [flags]\n")
-	fmt.Fprintf(os.Stderr, "Commands:\n")
-	fmt.Fprintf(os.Stderr, "  build    Build all targets\n")
-	fmt.Fprintf(os.Stderr, "  run      Run differential fuzzing campaign\n")
-	fmt.Fprintf(os.Stderr, "  reduce   Deduplicate corpus by coverage profile\n")
-	fmt.Fprintf(os.Stderr, "  analyze  Run a payload against all targets and print hex output\n")
-	fmt.Fprintf(os.Stderr, "Flags:\n")
-	fmt.Fprintf(os.Stderr, "  --name=fuzz1,fuzz2      Comma-separated list of target names to build/run (default: all)\n")
-	fmt.Fprintf(os.Stderr, "  --build                 Build all targets before running (run command only)\n")
-	fmt.Fprintf(os.Stderr, "  --warmup=N              Run corpus N times before the main fuzzing loop (run command only)\n")
-	fmt.Fprintf(os.Stderr, "  --max-findings=N        Stop after N unique findings (run command only, default: 10)\n")
-	fmt.Fprintf(os.Stderr, "  --validate=N            Re-execute each new input N times; log unstable inputs and which targets differ\n")
-	fmt.Fprintf(os.Stderr, "  --timeout=DURATION      Per-execution timeout; kill and restart target on expiry (default: 5s)\n")
-	fmt.Fprintf(os.Stderr, "  --max-memory=SIZE       Virtual memory limit per target process (e.g. 512M, 1G); 0 = no limit\n")
-	fmt.Fprintf(os.Stderr, "  --corpus=DIR            Directory for corpus entries (default: corpus)\n")
-	fmt.Fprintf(os.Stderr, "  --findings=DIR          Directory for saving findings (default: findings)\n")
-	fmt.Fprintf(os.Stderr, "  --corpus-reduced=DIR    Output directory for reduced corpus (reduce command only, default: corpus-reduced)\n")
-	fmt.Fprintf(os.Stderr, "  --workers=N             Number of parallel fuzzing workers, each with their own target processes (default: 1)\n")
-	fmt.Fprintf(os.Stderr, "  --debug-edge            Print per-target edge counts in status ticker (run command only)\n")
-	fmt.Fprintf(os.Stderr, "  --log-file=PATH         Also write all stdout output to this file (run command only)\n")
-	fmt.Fprintf(os.Stderr, "  --payload=STRING        Payload bytes to send (analyze command only)\n")
-	fmt.Fprintf(os.Stderr, "  --payload-path=PATH     File or directory of payloads to send (analyze command only)\n")
+// Persistent (root-level) flag values shared across all subcommands.
+var (
+	flagName      string
+	flagTimeout   string
+	flagMaxMemory string
+)
+
+var rootCmd = &cobra.Command{
+	Use:   "crossfuzz",
+	Short: "Coverage-guided differential fuzzer",
+}
+
+func init() {
+	rootCmd.PersistentFlags().StringVar(&flagName, "name", "", "Comma-separated list of target names to build/run (default: all)")
+	rootCmd.PersistentFlags().StringVar(&flagTimeout, "timeout", "5s", "Per-execution timeout; target is killed and restarted on expiry (e.g. 5s, 500ms)")
+	rootCmd.PersistentFlags().StringVar(&flagMaxMemory, "max-memory", "0", "Virtual memory limit per target process (e.g. 512M, 1G); 0 = no limit")
+
+	rootCmd.AddCommand(buildCmd())
+	rootCmd.AddCommand(runCmd())
+	rootCmd.AddCommand(reduceCmd())
+	rootCmd.AddCommand(analyzeCmd())
 }
 
 func main() {
-	if len(os.Args) < 3 {
-		usage()
-		os.Exit(1)
-	}
-
-	command := os.Args[1]
-	fs := flag.NewFlagSet(command, flag.ExitOnError)
-	nameFlag := fs.String("name", "", "Comma-separated list of target names to build/run (default: all)")
-	buildFlag := fs.Bool("build", false, "Build all targets before running (run command only)")
-	warmupFlag := fs.Int("warmup", 0, "Number of times to run the corpus before the main fuzzing loop (run command only)")
-	maxFindingsFlag := fs.Int("max-findings", 10, "Stop after this many unique findings (run command only)")
-	validateFlag := fs.Int("validate", 0, "Re-execute each new input N times to confirm stable output; log unstable inputs with differing targets")
-	timeoutFlag := fs.String("timeout", "5s", "Per-execution timeout; target is killed and restarted on expiry (e.g. 5s, 500ms)")
-	maxMemoryFlag := fs.String("max-memory", "0", "Virtual memory limit per target (e.g. 512M, 1G); 0 = no limit")
-	corpusFlag := fs.String("corpus", "corpus", "Directory for storing and loading corpus entries (run command only)")
-	findingsFlag := fs.String("findings", "findings", "Directory for saving findings (run command only)")
-	corpusReducedFlag := fs.String("corpus-reduced", "corpus-reduced", "Output directory for reduced corpus (reduce command only)")
-	debugEdgeFlag := fs.Bool("debug-edge", false, "Print per-target edge counts in status ticker (run command only)")
-	logFileFlag := fs.String("log-file", "", "Also write all stdout output to this file (run command only)")
-	workersFlag := fs.Int("workers", 1, "Number of parallel fuzzing workers, each with their own target processes (run command only)")
-	payloadFlag := fs.String("payload", "", "Payload string to send to all targets (analyze command only)")
-	payloadPathFlag := fs.String("payload-path", "", "File or directory of payloads to send (analyze command only)")
-	fs.Usage = usage
-
-	// os.Args[2] is the config file; flags follow after
-	if err := fs.Parse(os.Args[3:]); err != nil {
-		os.Exit(1)
-	}
-
-	cfg, err := config.Load(os.Args[2])
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
-		os.Exit(1)
-	}
-
-	if *nameFlag != "" {
-		cfg.Targets = filterTargets(cfg.Targets, *nameFlag)
-		if len(cfg.Targets) == 0 {
-			fmt.Fprintf(os.Stderr, "No targets matched --name=%s\n", *nameFlag)
-			os.Exit(1)
-		}
-	}
-
-	// Parse --timeout (overrides config exec_timeout).
-	execTimeout, err := time.ParseDuration(*timeoutFlag)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Invalid --timeout %q: %v\n", *timeoutFlag, err)
-		os.Exit(1)
-	}
-	cfg.Campaign.ExecTimeout.Duration = execTimeout
-
-	// Parse --max-memory.
-	memLimit, err := parseBytes(*maxMemoryFlag)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Invalid --max-memory %q: %v\n", *maxMemoryFlag, err)
-		os.Exit(1)
-	}
-
-	switch command {
-	case "build":
-		cmdBuild(cfg)
-	case "run":
-		if isFlagSet(fs, "corpus") || cfg.Corpus.CacheDir == "" {
-			cfg.Corpus.CacheDir = *corpusFlag
-		}
-		if isFlagSet(fs, "findings") || cfg.Corpus.FindingsDir == "" {
-			cfg.Corpus.FindingsDir = *findingsFlag
-		}
-		cmdRun(cfg, *warmupFlag, *validateFlag, *maxFindingsFlag, *debugEdgeFlag, memLimit, *workersFlag, *buildFlag, *logFileFlag)
-	case "reduce":
-		if *buildFlag {
-			cmdBuild(cfg)
-		}
-		if isFlagSet(fs, "corpus") || cfg.Corpus.CacheDir == "" {
-			cfg.Corpus.CacheDir = *corpusFlag
-		}
-		cmdReduce(cfg, *corpusReducedFlag, *validateFlag)
-	case "analyze":
-		if *buildFlag {
-			cmdBuild(cfg)
-		}
-		if *payloadFlag == "" && *payloadPathFlag == "" {
-			fmt.Fprintf(os.Stderr, "analyze requires --payload or --payload-path\n")
-			os.Exit(1)
-		}
-		cmdAnalyze(cfg, *payloadFlag, *payloadPathFlag)
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", command)
+	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
 }
 
-func isFlagSet(fs *flag.FlagSet, name string) bool {
-	found := false
-	fs.Visit(func(f *flag.Flag) {
-		if f.Name == name {
-			found = true
+// loadConfig loads the TOML config from args[0], applies the --name filter and
+// --timeout override, and returns the config plus the parsed memory limit.
+func loadConfig(cmd *cobra.Command, args []string) (*config.Config, uint64, error) {
+	cfg, err := config.Load(args[0])
+	if err != nil {
+		return nil, 0, fmt.Errorf("error loading config: %w", err)
+	}
+
+	if flagName != "" {
+		cfg.Targets = filterTargets(cfg.Targets, flagName)
+		if len(cfg.Targets) == 0 {
+			return nil, 0, fmt.Errorf("no targets matched --name=%s", flagName)
 		}
-	})
-	return found
+	}
+
+	execTimeout, err := time.ParseDuration(flagTimeout)
+	if err != nil {
+		return nil, 0, fmt.Errorf("invalid --timeout %q: %w", flagTimeout, err)
+	}
+	cfg.Campaign.ExecTimeout.Duration = execTimeout
+
+	memLimit, err := parseBytes(flagMaxMemory)
+	if err != nil {
+		return nil, 0, fmt.Errorf("invalid --max-memory %q: %w", flagMaxMemory, err)
+	}
+
+	return cfg, memLimit, nil
+}
+
+func buildCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "build <config.toml>",
+		Short: "Build all targets",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, _, err := loadConfig(cmd, args)
+			if err != nil {
+				return err
+			}
+			cmdBuild(cfg)
+			return nil
+		},
+	}
+}
+
+func runCmd() *cobra.Command {
+	var (
+		build       bool
+		warmup      int
+		maxFindings int
+		validate    int
+		corpus      string
+		findings    string
+		debugEdge   bool
+		logFile     string
+		workers     int
+	)
+
+	cmd := &cobra.Command{
+		Use:   "run <config.toml>",
+		Short: "Run differential fuzzing campaign",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, memLimit, err := loadConfig(cmd, args)
+			if err != nil {
+				return err
+			}
+			if cmd.Flags().Changed("corpus") || cfg.Corpus.CacheDir == "" {
+				cfg.Corpus.CacheDir = corpus
+			}
+			if cmd.Flags().Changed("findings") || cfg.Corpus.FindingsDir == "" {
+				cfg.Corpus.FindingsDir = findings
+			}
+			cmdRun(cfg, warmup, validate, maxFindings, debugEdge, memLimit, workers, build, logFile)
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVar(&build, "build", false, "Build all targets before running")
+	cmd.Flags().IntVar(&warmup, "warmup", 0, "Number of times to run the corpus before the main fuzzing loop")
+	cmd.Flags().IntVar(&maxFindings, "max-findings", 10, "Stop after this many unique findings")
+	cmd.Flags().IntVar(&validate, "validate", 0, "Re-execute each new input N times to confirm stable output; log unstable inputs with differing targets")
+	cmd.Flags().StringVar(&corpus, "corpus", "corpus", "Directory for storing and loading corpus entries")
+	cmd.Flags().StringVar(&findings, "findings", "findings", "Directory for saving findings")
+	cmd.Flags().BoolVar(&debugEdge, "debug-edge", false, "Print per-target edge counts in status ticker")
+	cmd.Flags().StringVar(&logFile, "log-file", "", "Also write all stdout output to this file")
+	cmd.Flags().IntVar(&workers, "workers", 1, "Number of parallel fuzzing workers, each with their own target processes")
+
+	return cmd
+}
+
+func reduceCmd() *cobra.Command {
+	var (
+		build         bool
+		corpus        string
+		corpusReduced string
+		validate      int
+	)
+
+	cmd := &cobra.Command{
+		Use:   "reduce <config.toml>",
+		Short: "Deduplicate corpus by coverage profile",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, _, err := loadConfig(cmd, args)
+			if err != nil {
+				return err
+			}
+			if build {
+				cmdBuild(cfg)
+			}
+			if cmd.Flags().Changed("corpus") || cfg.Corpus.CacheDir == "" {
+				cfg.Corpus.CacheDir = corpus
+			}
+			cmdReduce(cfg, corpusReduced, validate)
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVar(&build, "build", false, "Build all targets before reducing")
+	cmd.Flags().StringVar(&corpus, "corpus", "corpus", "Directory for loading corpus entries")
+	cmd.Flags().StringVar(&corpusReduced, "corpus-reduced", "corpus-reduced", "Output directory for reduced corpus")
+	cmd.Flags().IntVar(&validate, "validate", 0, "Re-execute each new input N times to confirm stable output; log unstable inputs with differing targets")
+
+	return cmd
+}
+
+func analyzeCmd() *cobra.Command {
+	var (
+		build       bool
+		payload     string
+		payloadPath string
+	)
+
+	cmd := &cobra.Command{
+		Use:   "analyze <config.toml>",
+		Short: "Run a payload against all targets and print hex output",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, _, err := loadConfig(cmd, args)
+			if err != nil {
+				return err
+			}
+			if build {
+				cmdBuild(cfg)
+			}
+			if payload == "" && payloadPath == "" {
+				return fmt.Errorf("analyze requires --payload or --payload-path")
+			}
+			cmdAnalyze(cfg, payload, payloadPath)
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVar(&build, "build", false, "Build all targets before analyzing")
+	cmd.Flags().StringVar(&payload, "payload", "", "Payload string to send to all targets")
+	cmd.Flags().StringVar(&payloadPath, "payload-path", "", "File or directory of payloads to send")
+
+	return cmd
 }
 
 func filterTargets(targets []config.TargetConfig, nameList string) []config.TargetConfig {
