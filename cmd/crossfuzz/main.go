@@ -400,6 +400,34 @@ func buildComparator(cfg *config.Config, targetSHMs map[string]string) (compare.
 	}
 }
 
+// buildFilter constructs the input filter configured in cfg for a single
+// worker, or returns (nil, nil) when no filter is configured. Each worker gets
+// its own filter process so workers do not serialise through a single one;
+// workerID is exposed to the process as CROSSFUZZ_ID so that multiple filter
+// instances can keep any on-disk state separate. Exits on errors.
+func buildFilter(cfg *config.Config, workerID int) (*runner.FilterProcess, func()) {
+	if cfg.InputFilter.Binary == "" {
+		return nil, nil
+	}
+	env := append([]string{fmt.Sprintf("CROSSFUZZ_ID=%d", workerID)}, cfg.InputFilter.Env...)
+	filter, err := runner.NewFilterProcess(runner.ProcessConfig{
+		Name:   "input_filter",
+		Binary: cfg.InputFilter.Binary,
+		Args:   cfg.InputFilter.Args,
+		Env:    env,
+	}, cfg.InputFilter.Transform)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating input filter: %v\n", err)
+		os.Exit(1)
+	}
+	if err := filter.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error starting input filter: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("Started input filter.")
+	return filter, func() { filter.Stop() }
+}
+
 // setupLogFile redirects os.Stdout to a tee that writes to both the original
 // stdout and the named file. The returned cleanup function must be called
 // (typically via defer) to flush and close the log file.
@@ -476,32 +504,28 @@ func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debug
 		}
 	}
 
-	// Start the input filter process if configured.
-	var filter *runner.FilterProcess
-	if cfg.InputFilter.Binary != "" {
-		var err error
-		filter, err = runner.NewFilterProcess(runner.ProcessConfig{
-			Name:   "input_filter",
-			Binary: cfg.InputFilter.Binary,
-			Args:   cfg.InputFilter.Args,
-			Env:    cfg.InputFilter.Env,
-		}, cfg.InputFilter.Transform)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating input filter: %v\n", err)
-			os.Exit(1)
+	// Build an input filter per worker (if configured). The coordinator
+	// serialises each worker through its filter via a mutex, so a single
+	// shared filter would make every worker block on one process; each worker
+	// gets its own instead.
+	var filterStops []func()
+	defer func() {
+		for _, stop := range filterStops {
+			stop()
 		}
-		if err := filter.Start(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error starting input filter: %v\n", err)
-			os.Exit(1)
+	}()
+	for i := range workerSets {
+		filter, stop := buildFilter(cfg, i)
+		workerSets[i].Filter = filter
+		if stop != nil {
+			filterStops = append(filterStops, stop)
 		}
-		defer filter.Stop()
-		fmt.Println("Started input filter.")
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	coord := engine.NewCoordinator(cfg, workerSets, filter)
+	coord := engine.NewCoordinator(cfg, workerSets)
 	coord.SetWarmupRounds(warmup)
 	coord.SetValidateRounds(validate)
 	coord.SetMaxFindings(maxFindings)
