@@ -16,19 +16,7 @@ A **harness** is a thin library that handles the IPC between the cross_fuzz coor
 
 You never touch pipes or shared memory directly.
 
-## Choosing a language
-
-| Language | Reference | Notes |
-|----------|-----------|-------|
-| C | `<skill-dir>/references/c.md` | Fastest; SanitizerCoverage via clang |
-| C++ | `<skill-dir>/references/c.md` | Thin wrapper over C; same build flags |
-| Go | `<skill-dir>/references/go.md` | Easy to use; needs `-cover` build flag and coverpkg list |
-| Java | `<skill-dir>/references/java.md` | JVM startup hidden by persistent mode; needs `-javaagent` |
-| JS/TS | `<skill-dir>/references/js.md` | Runs under Bun; Istanbul-based coverage |
-| Python | `<skill-dir>/references/python.md` | Branch-arc coverage via the `coverage` library |
-| Rust | `<skill-dir>/references/rust.md` | SanitizerCoverage via rustc LLVM flags; needs RUSTFLAGS at build time |
-
-Pick the language your target implementation is already in, then read the matching reference file. Each per-language reference covers the full harness API: target signature, build command, Settings, Filter, Compare, and server-mode usage.
+Pick the language your target implementation is already in and read the matching reference file from the index at the bottom. Each per-language reference covers the full harness API: target signature, build command, Settings, Filter, Compare, and server-mode usage.
 
 ## Three entry points per harness
 
@@ -74,23 +62,15 @@ All harnesses accept a Settings struct/object with these fields:
 
 Field naming varies by language: Go uses `Instrument`/`Transform`; C/C++/Java/JS/Python/Rust use `instrument`/`transform`. See each language reference for the exact form.
 
-## TOML config
-
-For the full annotated schema (campaign, corpus, target, comparator, input_filter) and real examples, read `<skill-dir>/references/config.md`.
-
-## IPC protocol
-
-For the wire protocol, shared memory layout, pipe message types, and coverage bitmap format, read `<skill-dir>/references/protocol.md`.
-
 ## Reference index
 
 All references live in `<skill-dir>/references/`:
 
-- `config.md` — TOML config schema and examples
-- `protocol.md` — wire protocol and shared memory layout
-- `c.md` — C and C++ targets
-- `go.md` — Go targets
-- `java.md` — Java targets
-- `js.md` — JavaScript and TypeScript targets
-- `python.md` — Python targets
-- `rust.md` — Rust targets
+- `config.md` — TOML config schema (campaign, corpus, target, comparator, input_filter) and real examples
+- `protocol.md` — wire protocol, pipe message types, shared memory layout, coverage bitmap format
+- `c.md` — C and C++ targets. Fastest; SanitizerCoverage via clang
+- `go.md` — Go targets. Easy to use; needs `-cover` and a coverpkg list
+- `java.md` — Java targets. Persistent JVM hides startup cost; needs `-javaagent`
+- `js.md` — JavaScript / TypeScript targets. Runs under Bun; Istanbul-based coverage
+- `python.md` — Python targets. Branch-arc coverage via the `coverage` library
+- `rust.md` — Rust targets. SanitizerCoverage via rustc LLVM flags; needs RUSTFLAGS at build time
