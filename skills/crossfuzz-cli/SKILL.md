@@ -1,6 +1,6 @@
 ---
 name: crossfuzz-cli
-description: Use this skill whenever the user asks about running cross_fuzz, writing a crossfuzz.toml config file, understanding CLI commands (build/run/reduce/analyze), choosing a comparator, setting up an input filter, reading findings, or troubleshooting a fuzzing campaign. Trigger for questions like "how do I run cross_fuzz?", "what does --workers do?", "how do I write the config?", "what comparator should I use?", or "why are there no findings?".
+description: Use this skill whenever the user asks about running cross_fuzz, understanding CLI commands (build/run/reduce/analyze), CLI flags, reading findings, or troubleshooting a fuzzing campaign. Trigger for questions like "how do I run cross_fuzz?", "what does --workers do?", "what does `analyze` do?", "what comparator should I use?", or "why are there no findings?". For writing the crossfuzz.toml config itself, the **crossfuzz-harness** skill owns the schema.
 ---
 
 # cross_fuzz CLI
@@ -41,7 +41,7 @@ For full flag documentation read `<skill-dir>/references/commands.md`.
 
 Four sections: `[campaign]`, `[corpus]`, `[[target]]` (one per implementation), `[comparator]`, and optionally `[input_filter]`.
 
-For the complete annotated schema and real examples read `<skill-dir>/references/config.md`.
+For the complete annotated schema and real examples, see the **crossfuzz-harness** skill's `references/config.md` — TOML config ownership lives there alongside the harness API references.
 
 ### Minimal working config
 

@@ -59,7 +59,7 @@ Each language harness handles the pipe protocol, shared memory mapping, and cove
 - **Java** (`harness/java/`): Gradle project; custom `CoverageAgent`/`CoverageTransformer` via Java instrumentation API; produces `crossfuzz.jar`. Pass `-javaagent:crossfuzz.jar` at runtime.
 - **JavaScript/TypeScript** (`harness/js/`): runs under Bun. Istanbul-based AST instrumentation is applied via `bun run --preload ../../harness/js/instrument.ts`. The harness entry point is `crossfuzz.ts`; targets import `run` from it.
 
-All harnesses support a `DisableInstrumentation` setting (Go: `Settings{DisableInstrumentation: true}`, C++: `Settings{.disable_instrumentation=true}`, JS: `settings.disableInstrumentation`) for use when the harness is a thin HTTP trigger and coverage should come entirely from an instrumented server process.
+All harnesses support an `instrument` setting (default `true`) that can be set to `false` when the harness is a thin HTTP trigger and coverage should come entirely from an instrumented server process. Field names: Go `Settings{Instrument: false}`, C `{.instrument = 0}`, C++ `{.instrument = false}`, JS `{instrument: false}`, Python/Rust/Java `instrument = false`.
 
 ### Server targets
 
@@ -89,6 +89,6 @@ A 64 KB byte array of saturating counters following the AFL model. Counters are 
 
 TOML files with four sections: `[campaign]`, `[corpus]`, `[comparator]`, and one or more `[[target]]` entries. The `build_cmd` field in each target is run by `crossfuzz build`; it is separate from the `binary`/`args` used at runtime.
 
-Target `language` values: `"c"`, `"cpp"`, `"go"`, `"java"`, `"js"`. Target `type` values: `"harness"` (default, uses pipe protocol) or `"server"` (long-running process, no pipe).
+Target `language` values: `"c"`, `"cpp"`, `"go"`, `"java"`, `"js"`, `"python"`, `"rust"`. Target `type` values: `"harness"` (default, uses pipe protocol) or `"server"` (long-running process, no pipe).
 
 Comparator `type` values: `"byte_equal"`, `"json_structural"`, `"numeric"`, `"custom"` (requires `script`), `"none"`.

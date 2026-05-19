@@ -1,6 +1,6 @@
 ---
 name: crossfuzz-harness
-description: Use this skill when the user wants to add a new target to a cross_fuzz campaign, understand how harnesses work, choose which language to write a target in, or learn about the IPC protocol between the coordinator and a target process. Trigger for questions like "how do I add a new target?", "what does a harness do?", "how does cross_fuzz communicate with my process?", "what is DisableInstrumentation for?", "how do I write an input filter?", "how do I write a comparator harness?", or "how do I set up a server target?".
+description: Use this skill when the user wants to add a new target to a cross_fuzz campaign, write a crossfuzz.toml config, understand how harnesses work, choose which language to write a target in, learn about the IPC protocol between the coordinator and a target process, or understand the shared-memory layout, coverage bitmap, or pipe messages. Trigger for questions like "how do I add a new target?", "how do I write the config?", "what does a harness do?", "how does cross_fuzz communicate with my process?", "what does fd 3 do?", "what is the coverage bitmap format?", "how does the bitmap merge work?", "what is `instrument` for?", "how do I write an input filter?", "how do I write a comparator harness?", or "how do I set up a server target?".
 ---
 
 # cross_fuzz Harness Overview
@@ -18,17 +18,17 @@ You never touch pipes or shared memory directly.
 
 ## Choosing a language
 
-| Language | Skill | Notes |
-|----------|-------|-------|
-| C | `crossfuzz-harness-c` | Fastest; SanitizerCoverage via clang |
-| C++ | `crossfuzz-harness-c` | Thin wrapper over C; same build flags |
-| Go | `crossfuzz-harness-go` | Easy to use; needs `-cover` build flag and coverpkg list |
-| Java | `crossfuzz-harness-java` | JVM startup hidden by persistent mode; needs `-javaagent` |
-| JS/TS | `crossfuzz-harness-js` | Runs under Bun; Istanbul-based coverage |
-| Python | `crossfuzz-harness-python` | Branch-arc coverage via the `coverage` library; needs `pip install coverage` |
-| Rust | `crossfuzz-harness-rust` | SanitizerCoverage via rustc LLVM flags; needs RUSTFLAGS at build time |
+| Language | Reference | Notes |
+|----------|-----------|-------|
+| C | `<skill-dir>/references/c.md` | Fastest; SanitizerCoverage via clang |
+| C++ | `<skill-dir>/references/c.md` | Thin wrapper over C; same build flags |
+| Go | `<skill-dir>/references/go.md` | Easy to use; needs `-cover` build flag and coverpkg list |
+| Java | `<skill-dir>/references/java.md` | JVM startup hidden by persistent mode; needs `-javaagent` |
+| JS/TS | `<skill-dir>/references/js.md` | Runs under Bun; Istanbul-based coverage |
+| Python | `<skill-dir>/references/python.md` | Branch-arc coverage via the `coverage` library |
+| Rust | `<skill-dir>/references/rust.md` | SanitizerCoverage via rustc LLVM flags; needs RUSTFLAGS at build time |
 
-Pick the language your target implementation is already in.
+Pick the language your target implementation is already in, then read the matching reference file. Each per-language reference covers the full harness API: target signature, build command, Settings, Filter, Compare, and server-mode usage.
 
 ## Three entry points per harness
 
@@ -55,24 +55,42 @@ binary   = "./api_server"
 
 [[target]]
 name     = "js_client"
-type     = "harness"          # This one sends HTTP requests and reports results
+type     = "harness"          # Sends HTTP requests and reports results
 language = "js"
 binary   = "bun"
 args     = ["run", "--preload", "../../harness/js/instrument.ts", "./client.ts"]
 ```
 
-When coverage should come entirely from the server and the harness is a thin HTTP trigger, set `Instrument: false` in the harness's Settings.
+When coverage should come entirely from the server and the harness is a thin HTTP trigger, set `instrument: false` in the harness's Settings.
 
 ## Settings
 
-All harnesses accept a Settings struct/object:
+All harnesses accept a Settings struct/object with these fields:
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `Instrument` / `instrument` | `true` | Collect and report coverage. Set `false` when the harness is a thin client and coverage comes from the server. |
-| `Warmup` / `warmup` | `0` | Go only: run extra iterations on first input to mask flaky GC/allocator coverage slots |
-| `Transform` / `transform` | `false` | Filter mode only: when `true`, the filter's returned bytes replace the original input for targets |
+| `instrument` | `true` | Collect and report coverage. Set `false` when the harness is a thin client and coverage comes from the server. |
+| `transform` | `false` | Filter mode only: when `true`, the filter's returned bytes replace the original input for targets. |
 
-## For the wire protocol and shared memory layout
+Field naming varies by language: Go uses `Instrument`/`Transform`; C/C++/Java/JS/Python/Rust use `instrument`/`transform`. See each language reference for the exact form.
 
-Read `<skill-dir>/references/protocol.md`.
+## TOML config
+
+For the full annotated schema (campaign, corpus, target, comparator, input_filter) and real examples, read `<skill-dir>/references/config.md`.
+
+## IPC protocol
+
+For the wire protocol, shared memory layout, pipe message types, and coverage bitmap format, read `<skill-dir>/references/protocol.md`.
+
+## Reference index
+
+All references live in `<skill-dir>/references/`:
+
+- `config.md` — TOML config schema and examples
+- `protocol.md` — wire protocol and shared memory layout
+- `c.md` — C and C++ targets
+- `go.md` — Go targets
+- `java.md` — Java targets
+- `js.md` — JavaScript and TypeScript targets
+- `python.md` — Python targets
+- `rust.md` — Rust targets

@@ -1,4 +1,70 @@
-# Java Harness — Complete Reference
+# Java Harness
+
+## JAR
+
+The harness is distributed as a single JAR built with Gradle:
+
+```bash
+cd harness/java && gradle jar
+# Produces: harness/java/build/libs/crossfuzz.jar
+```
+
+The JAR serves as both the agent (`-javaagent:crossfuzz.jar`) and classpath dependency (`-cp crossfuzz.jar`).
+
+## Fuzz target
+
+```java
+import crossfuzz.Crossfuzz;
+
+public class MyTarget implements Crossfuzz.FuzzTarget {
+    @Override
+    public byte[] fuzz(byte[] input) throws Exception {
+        // Throw to mark execution as error-status.
+        return input;
+    }
+
+    public static void main(String[] args) throws Exception {
+        Crossfuzz.fuzz(new MyTarget());
+    }
+}
+```
+
+Or with a lambda:
+
+```java
+Crossfuzz.fuzz(input -> { return input; });
+```
+
+### Interface
+
+```java
+@FunctionalInterface
+public interface FuzzTarget {
+    byte[] fuzz(byte[] input) throws Exception;
+}
+```
+
+## Build and run
+
+```bash
+cd ../../harness/java && gradle jar
+cd -
+javac -cp ../../harness/java/build/libs/crossfuzz.jar MyTarget.java
+```
+
+The `-javaagent` flag activates coverage instrumentation. Without it the binary runs but produces no coverage signal.
+
+## TOML config entry
+
+```toml
+[[target]]
+name = "java_impl"
+language = "java"
+binary = "java"
+args = ["-javaagent:../../harness/java/build/libs/crossfuzz.jar",
+        "-cp", "../../harness/java/build/libs/crossfuzz.jar:.", "MyTarget"]
+build_cmd = "cd ../../harness/java && gradle jar && cd - && javac -cp ../../harness/java/build/libs/crossfuzz.jar MyTarget.java"
+```
 
 ## Settings
 
@@ -11,10 +77,8 @@ Crossfuzz.fuzz(target, settings);
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `instrument` | `true` | Enable JaCoCo-based coverage collection |
-| `warmup` | `0` | Reserved |
+| `instrument` | `true` | Enable coverage collection via the javaagent |
 | `transform` | `false` | Filter mode: when true, returned bytes replace the original input |
-| `hinting` | `false` | Reserved |
 
 ## Filter target
 
@@ -24,8 +88,6 @@ import crossfuzz.Crossfuzz;
 public class MyFilter {
     public static void main(String[] args) throws Exception {
         Crossfuzz.filter(input -> {
-            // Return FilterResult(output, accepted).
-            // output only used when settings.transform = true.
             if (input.length < 4) {
                 return new Crossfuzz.FilterResult(null, false);  // reject
             }
@@ -41,12 +103,11 @@ public class MyFilter {
 public static class FilterResult {
     public final byte[] output;
     public final boolean accepted;
-
     public FilterResult(byte[] output, boolean accepted) { ... }
 }
 ```
 
-Configure in `crossfuzz.toml` as `[input_filter]` (not as a `[[target]]`).
+Configure as `[input_filter]`.
 
 ## Compare target
 
@@ -56,7 +117,6 @@ import crossfuzz.Crossfuzz;
 public class MyComparator {
     public static void main(String[] args) throws Exception {
         Crossfuzz.compare((input, targetNames, targetOutputs) -> {
-            // Return null or "" for match, non-empty string for mismatch.
             if (targetOutputs.length < 2) return null;
             if (!java.util.Arrays.equals(targetOutputs[0], targetOutputs[1])) {
                 return targetNames[0] + " and " + targetNames[1] + " differ";
@@ -76,7 +136,7 @@ public interface CompareTarget {
 }
 ```
 
-Configure in `crossfuzz.toml` as `[comparator] type = "harness"`.
+Configure as `[comparator] type = "harness"`.
 
 ## Server mode
 
@@ -85,7 +145,6 @@ import crossfuzz.Crossfuzz;
 
 public class MyServer {
     public static void main(String[] args) throws Exception {
-        // Call once during initialization:
         Crossfuzz.initServer();  // opens SHM + starts instrumentation (no-op if CROSSFUZZ_SHM not set)
 
         // Before handling each request:
@@ -99,7 +158,7 @@ public class MyServer {
 }
 ```
 
-Configure the server in `crossfuzz.toml` as `type = "server"`:
+Configure in `crossfuzz.toml` as `type = "server"`:
 
 ```toml
 [[target]]
@@ -112,8 +171,6 @@ args = ["-javaagent:../../harness/java/build/libs/crossfuzz.jar",
 ```
 
 ## Gradle project layout
-
-For larger targets, set up a Gradle project alongside the harness:
 
 ```
 my_target/
@@ -128,71 +185,16 @@ plugins {
     id 'application'
 }
 
-application {
-    mainClass = 'MyTarget'
-}
+application { mainClass = 'MyTarget' }
 
 dependencies {
     implementation files('../../harness/java/build/libs/crossfuzz.jar')
 }
 ```
 
-Build and run config:
-```toml
-[[target]]
-name = "java_impl"
-language = "java"
-binary = "java"
-args = ["-javaagent:../../harness/java/build/libs/crossfuzz.jar",
-        "-cp", "../../harness/java/build/libs/crossfuzz.jar:build/libs/my_target.jar", "MyTarget"]
-build_cmd = "cd ../../harness/java && gradle jar && cd - && gradle jar"
-```
-
-## Full example: JSON parser (Java)
-
-From `examples/json_parse/JavaTarget.java`:
-
-```java
-import crossfuzz.Crossfuzz;
-
-public class JavaTarget implements Crossfuzz.FuzzTarget {
-    private byte[] src;
-    private int    pos;
-
-    @Override
-    public byte[] fuzz(byte[] input) {
-        src = input;
-        pos = 0;
-        try {
-            String type = parseValue();
-            skipWs();
-            if (pos != src.length) return b("error");
-            return b(type);
-        } catch (Exception e) {
-            return b("error");
-        }
-    }
-
-    // ... parser implementation ...
-
-    private static byte[] b(String s) { return s.getBytes(java.nio.charset.StandardCharsets.UTF_8); }
-
-    public static void main(String[] args) throws Exception {
-        Crossfuzz.fuzz(new JavaTarget());
-    }
-}
-```
-
-Build command from `examples/json_parse/crossfuzz.toml`:
-
-```bash
-cd ../../harness/java && gradle jar && cd - && javac -cp ../../harness/java/build/libs/crossfuzz.jar JavaTarget.java
-```
-
 ## Common pitfalls
 
-- **Missing `-javaagent`**: binary runs but produces no coverage — fuzzer never discovers new inputs.
-- **JVM startup time**: not a concern — the harness uses persistent mode, so the JVM starts once and runs thousands of iterations.
-- **`/proc/self/fd/3` and `/proc/self/fd/4`**: the Java harness uses these paths to open the pipes. Requires Linux (works on all standard Linux distros).
+- **Missing `-javaagent`**: binary runs but produces no coverage.
+- **`/proc/self/fd/3` and `/proc/self/fd/4`**: the Java harness uses these to open pipes; requires Linux.
 - **Classpath order**: `crossfuzz.jar` must appear before your target classes in `-cp` for the agent to instrument them.
-- **Java version**: requires JDK 11+ (uses `FileChannel.map` and functional interfaces).
+- **Java version**: requires JDK 11+.
