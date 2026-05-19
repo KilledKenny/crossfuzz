@@ -26,7 +26,7 @@ type ReduceResult struct {
 // non-deterministic across runs are logged and skipped. Returns the reduced
 // set of inputs and a count of how many were evaluated.
 func Reduce(ctx context.Context, cfg *config.Config, runners []runner.Runner, validateRounds int) (*ReduceResult, error) {
-	corpus := NewCorpus(cfg.Corpus.SeedDir, cfg.Corpus.CacheDir)
+	corpus := NewCorpus(cfg.Corpus.SeedDir, cfg.Corpus.CorpusDir)
 	if err := corpus.Load(); err != nil {
 		return nil, fmt.Errorf("load corpus: %w", err)
 	}

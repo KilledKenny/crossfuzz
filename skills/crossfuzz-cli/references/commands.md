@@ -44,7 +44,7 @@ crossfuzz run crossfuzz.toml [flags]
 | `--max-memory=SIZE` | 0 (none) | Virtual memory limit per target process (e.g. `512M`, `1G`) |
 | `--validate=N` | 0 | Re-execute each new corpus input N times; log inputs whose output differs across runs |
 | `--warmup=N` | 0 | Run the full corpus N times before the main fuzzing loop starts |
-| `--corpus=DIR` | corpus | Directory for storing/loading corpus entries (overrides config `cache_dir` if set) |
+| `--corpus=DIR` | corpus | Directory for storing/loading corpus entries (overrides config `corpus_dir` if set) |
 | `--findings=DIR` | findings | Directory for saving findings (overrides config `findings_dir` if set) |
 | `--debug-edge` | false | Print per-target edge counts in the live status ticker |
 

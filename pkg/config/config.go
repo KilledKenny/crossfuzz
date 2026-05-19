@@ -39,7 +39,7 @@ type CampaignConfig struct {
 // CorpusConfig specifies corpus directories.
 type CorpusConfig struct {
 	SeedDir     string `toml:"seed_dir"`
-	CacheDir    string `toml:"cache_dir"`
+	CorpusDir   string `toml:"corpus_dir"`
 	FindingsDir string `toml:"findings_dir"`
 }
 

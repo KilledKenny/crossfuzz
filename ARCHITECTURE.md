@@ -387,7 +387,7 @@ max_input_size = 4096           # Maximum input size in bytes
 
 [corpus]
 seed_dir = "./seeds"            # User-provided seed inputs
-cache_dir = "./cache"           # Auto-discovered interesting inputs
+corpus_dir = "./corpus"         # Auto-discovered interesting inputs
 findings_dir = "./findings"     # Discrepancies and crashes
 
 [[target]]

@@ -9,7 +9,7 @@
 name = "my_diff"          # Campaign name shown in output (required)
 timeout = "30m"           # Total campaign duration; e.g. "30m", "1h", "2h30m"
 exec_timeout = "500ms"    # Per-execution timeout; target killed & restarted on expiry
-max_input_size = 4096     # Maximum input size in bytes (default 4096)
+max_input_size = 4096     # Maximum input size in bytes. Optional; defaults to 4096 if omitted. Hard cap is 1 MB (the input region size).
 ```
 
 `timeout` and `exec_timeout` accept Go duration strings: `ms`, `s`, `m`, `h`.
@@ -21,7 +21,7 @@ max_input_size = 4096     # Maximum input size in bytes (default 4096)
 ```toml
 [corpus]
 seed_dir     = "./seeds"    # User-provided seed inputs (files with initial test cases)
-cache_dir    = "./cache"    # Auto-discovered interesting inputs (written by coordinator)
+corpus_dir   = "./corpus"   # Auto-discovered interesting inputs (written by coordinator)
 findings_dir = "./findings" # Saved discrepancies and crashes
 ```
 
@@ -36,7 +36,7 @@ Repeat for each implementation. Order matters only for display.
 ```toml
 [[target]]
 name      = "go_impl"        # Unique name (used in output and --name flag)
-language  = "go"             # "c" | "cpp" | "go" | "java" | "js"
+language  = "go"             # "c" | "cpp" | "go" | "java" | "js" | "python" | "rust"
 binary    = "./go_target_bin"
 args      = []               # Optional CLI arguments to binary
 type      = "harness"        # "harness" (default) | "server"
@@ -117,7 +117,7 @@ type = "byte_equal"
 | `numeric` | Parse as float, compare with absolute epsilon |
 | `numeric_relative` | Parse as float, compare with relative tolerance |
 | `none` | Never reports a discrepancy (server mode) |
-| `custom` | External subprocess; reads JSON on stdin, exits 0=match, 1=mismatch |
+| `custom` | External subprocess; reads JSON on stdin. Exit 0 = match, non-zero = mismatch. If the script writes a non-empty line to stdout, it is used as the discrepancy description |
 | `harness` | Dedicated comparator process using the pipe protocol |
 
 **`type = "custom"`**
@@ -168,7 +168,7 @@ max_input_size = 1024
 
 [corpus]
 seed_dir = "./seeds"
-cache_dir = "./cache"
+corpus_dir = "./corpus"
 findings_dir = "./findings"
 
 [[target]]
@@ -205,7 +205,7 @@ max_input_size = 1024
 
 [corpus]
 seed_dir = "./seeds"
-cache_dir = "./cache"
+corpus_dir = "./corpus"
 findings_dir = "./findings"
 
 [[target]]

@@ -91,7 +91,7 @@ func NewCoordinator(cfg *config.Config, workerSets []WorkerRunners) *Coordinator
 	return &Coordinator{
 		cfg:          cfg,
 		workers:      workers,
-		corpus:       NewCorpus(cfg.Corpus.SeedDir, cfg.Corpus.CacheDir),
+		corpus:       NewCorpus(cfg.Corpus.SeedDir, cfg.Corpus.CorpusDir),
 		stats:        NewStats(),
 		globalCov:    make([]byte, coverage.BitmapSize),
 		perTargetCov: make(map[string][]byte),

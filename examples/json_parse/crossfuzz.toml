@@ -6,7 +6,7 @@ max_input_size = 4096
 
 [corpus]
 seed_dir = "./seeds"
-cache_dir = "./cache"
+corpus_dir = "./corpus"
 findings_dir = "./findings"
 
 [[target]]

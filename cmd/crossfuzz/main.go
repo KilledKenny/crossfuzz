@@ -118,8 +118,8 @@ func runCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if cmd.Flags().Changed("corpus") || cfg.Corpus.CacheDir == "" {
-				cfg.Corpus.CacheDir = corpus
+			if cmd.Flags().Changed("corpus") || cfg.Corpus.CorpusDir == "" {
+				cfg.Corpus.CorpusDir = corpus
 			}
 			if cmd.Flags().Changed("findings") || cfg.Corpus.FindingsDir == "" {
 				cfg.Corpus.FindingsDir = findings
@@ -162,8 +162,8 @@ func reduceCmd() *cobra.Command {
 			if build {
 				cmdBuild(cfg)
 			}
-			if cmd.Flags().Changed("corpus") || cfg.Corpus.CacheDir == "" {
-				cfg.Corpus.CacheDir = corpus
+			if cmd.Flags().Changed("corpus") || cfg.Corpus.CorpusDir == "" {
+				cfg.Corpus.CorpusDir = corpus
 			}
 			cmdReduce(cfg, corpusReduced, validate)
 			return nil
@@ -546,7 +546,7 @@ func cmdReduce(cfg *config.Config, outDir string, validate int) {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	fmt.Printf("Reducing corpus in %q...\n", cfg.Corpus.CacheDir)
+	fmt.Printf("Reducing corpus in %q...\n", cfg.Corpus.CorpusDir)
 	result, err := engine.Reduce(ctx, cfg, runners, validate)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Reduce error: %v\n", err)

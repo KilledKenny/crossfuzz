@@ -39,7 +39,7 @@ For full flag documentation read `<skill-dir>/references/commands.md`.
 
 ## Config file
 
-Four sections: `[campaign]`, `[corpus]`, `[[target]]` (one per implementation), `[comparator]`, and optionally `[input_filter]`.
+Five sections: `[campaign]`, `[corpus]`, `[[target]]` (one per implementation), `[comparator]`, and optionally `[input_filter]`.
 
 For the complete annotated schema and real examples, see the **crossfuzz-harness** skill's `references/config.md` — TOML config ownership lives there alongside the harness API references.
 
@@ -53,7 +53,7 @@ exec_timeout = "500ms"
 
 [corpus]
 seed_dir = "./seeds"
-cache_dir = "./cache"
+corpus_dir = "./corpus"
 findings_dir = "./findings"
 
 [[target]]
@@ -83,7 +83,7 @@ type = "byte_equal"
 | `numeric` | Outputs are numbers; compare with absolute epsilon tolerance |
 | `numeric_relative` | Same as `numeric` but uses relative tolerance |
 | `none` | Server mode — one harness drives everything, no comparison needed |
-| `custom` | Provide a script that reads JSON on stdin, exits 0 (match) or 1 (mismatch) |
+| `custom` | Provide a script that reads JSON on stdin; exit 0 = match, non-zero = mismatch (stdout used as description if non-empty) |
 | `harness` | Dedicated comparator process using the pipe protocol |
 
 ## Input filter

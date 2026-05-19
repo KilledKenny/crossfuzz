@@ -14,22 +14,22 @@ type Corpus struct {
 	mu       sync.RWMutex
 	entries  [][]byte
 	hashes   map[[32]byte]bool
-	seedDir  string
-	cacheDir string
+	seedDir   string
+	corpusDir string
 }
 
 // NewCorpus creates a corpus backed by the given directories.
-func NewCorpus(seedDir, cacheDir string) *Corpus {
+func NewCorpus(seedDir, corpusDir string) *Corpus {
 	return &Corpus{
-		hashes:   make(map[[32]byte]bool),
-		seedDir:  seedDir,
-		cacheDir: cacheDir,
+		hashes:    make(map[[32]byte]bool),
+		seedDir:   seedDir,
+		corpusDir: corpusDir,
 	}
 }
 
 // Load reads seed and cached inputs from disk.
 func (c *Corpus) Load() error {
-	for _, dir := range []string{c.seedDir, c.cacheDir} {
+	for _, dir := range []string{c.seedDir, c.corpusDir} {
 		if dir == "" {
 			continue
 		}
@@ -70,17 +70,17 @@ func (c *Corpus) Add(input []byte) bool {
 	return true
 }
 
-// Save persists an input to the cache directory.
+// Save persists an input to the corpus directory.
 func (c *Corpus) Save(input []byte) error {
-	if c.cacheDir == "" {
+	if c.corpusDir == "" {
 		return nil
 	}
-	if err := os.MkdirAll(c.cacheDir, 0755); err != nil {
-		return fmt.Errorf("create cache dir: %w", err)
+	if err := os.MkdirAll(c.corpusDir, 0755); err != nil {
+		return fmt.Errorf("create corpus dir: %w", err)
 	}
 	h := sha256.Sum256(input)
 	name := fmt.Sprintf("%x", h[:8])
-	return os.WriteFile(filepath.Join(c.cacheDir, name), input, 0644)
+	return os.WriteFile(filepath.Join(c.corpusDir, name), input, 0644)
 }
 
 // Pick returns a random corpus entry.
