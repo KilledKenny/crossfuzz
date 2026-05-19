@@ -2,6 +2,14 @@ plugins {
     id 'java'
 }
 
+// Pin the bytecode version. Without this, `gradle jar` emits class files for
+// whatever JDK built it (e.g. JDK 25 -> class version 69), which an older
+// runtime JDK cannot load. As a -javaagent that failure is a fatal native VM
+// crash during init, not a catchable error.
+tasks.withType(JavaCompile).configureEach {
+    options.release = 17
+}
+
 repositories {
     mavenCentral()
 }

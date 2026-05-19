@@ -43,11 +43,15 @@ public class CoverageTransformer implements ClassFileTransformer {
                 instrumentMethod(className, mn);
             }
             // COMPUTE_FRAMES: recompute all stack map frames from scratch so the
-            // inserted hit() calls don't invalidate existing frames.
+            // inserted hit() calls don't invalidate existing frames. Resolving the
+            // common superclass of two merged types must go through the *target's*
+            // class loader — ASM's default uses the ASM library's own loader, which
+            // cannot see application classes and would type merged frames as Object,
+            // producing a VerifyError when the JVM loads the instrumented class.
             ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES) {
                 @Override
                 protected String getCommonSuperClass(String type1, String type2) {
-                    return "java/lang/Object";
+                    return commonSuperClass(type1, type2, loader);
                 }
             };
             cn.accept(cw);
@@ -55,6 +59,39 @@ public class CoverageTransformer implements ClassFileTransformer {
         } catch (Throwable t) {
             return null;
         }
+    }
+
+    /**
+     * Resolves the common superclass of two internal type names by loading them
+     * through the target application's class loader. Mirrors the algorithm of
+     * ASM's default {@code ClassWriter.getCommonSuperClass}, which otherwise
+     * resolves against the ASM library's own loader and cannot see application
+     * classes — yielding frames typed too loosely (Object) and a VerifyError
+     * when the JVM loads the instrumented class.
+     *
+     * <p>If a type cannot be resolved this throws; {@link #transform} catches it
+     * and skips instrumentation for the whole class, so the uninstrumented class
+     * still loads and runs — it only loses coverage.
+     */
+    private static String commonSuperClass(String type1, String type2,
+            ClassLoader loader) {
+        ClassLoader cl = (loader != null) ? loader : ClassLoader.getSystemClassLoader();
+        Class<?> c, d;
+        try {
+            c = Class.forName(type1.replace('/', '.'), false, cl);
+            d = Class.forName(type2.replace('/', '.'), false, cl);
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+        if (c.isAssignableFrom(d)) return type1;
+        if (d.isAssignableFrom(c)) return type2;
+        if (c.isInterface() || d.isInterface()) {
+            return "java/lang/Object";
+        }
+        do {
+            c = c.getSuperclass();
+        } while (!c.isAssignableFrom(d));
+        return c.getName().replace('.', '/');
     }
 
     private void instrumentMethod(String cls, MethodNode mn) {
