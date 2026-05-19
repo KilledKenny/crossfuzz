@@ -22,30 +22,35 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// WorkerRunners bundles the runner sets for a single parallel fuzzing worker.
-// Each worker gets its own independent set of target processes.
+// WorkerRunners bundles the per-worker resources for a single parallel fuzzing
+// worker. Each worker gets its own independent set of target processes and its
+// own comparator, so a harness comparator reads the shared-memory regions of
+// this worker's targets rather than another worker's.
 type WorkerRunners struct {
-	Harness []runner.Runner
-	Servers []*runner.ServerProcess
+	Harness    []runner.Runner
+	Servers    []*runner.ServerProcess
+	Comparator compare.Comparator
 }
 
 // workerState holds per-worker mutable state that must not be shared between goroutines.
+// comparator is per-worker because a harness comparator is bound to a specific
+// worker's target SHM regions; stateless comparators may safely be the same value.
 type workerState struct {
 	id            int
 	runners       []runner.Runner
 	serverRunners []*runner.ServerProcess
+	comparator    compare.Comparator
 	mutator       *Mutator
 	rng           *rand.Rand
 }
 
 // Coordinator drives the fuzzing campaign.
 type Coordinator struct {
-	cfg        *config.Config
-	workers    []workerState
-	corpus     *Corpus
-	comparator compare.Comparator
-	filter     *runner.FilterProcess
-	stats      *Stats
+	cfg     *config.Config
+	workers []workerState
+	corpus  *Corpus
+	filter  *runner.FilterProcess
+	stats   *Stats
 
 	covMu        sync.Mutex // protects globalCov and perTargetCov
 	globalCov    []byte
@@ -60,11 +65,12 @@ type Coordinator struct {
 	maxFindings    int
 }
 
-// NewCoordinator creates a coordinator for the given config, worker runner sets, and comparator.
-// Each WorkerRunners in workerSets gets its own isolated set of target processes and runs
-// the fuzzing loop concurrently with the others, sharing the corpus and global coverage bitmap.
+// NewCoordinator creates a coordinator for the given config and worker sets.
+// Each WorkerRunners in workerSets carries its own isolated set of target
+// processes and its own comparator; the worker runs the fuzzing loop
+// concurrently with the others, sharing the corpus and global coverage bitmap.
 // filter may be nil if no input filter is configured.
-func NewCoordinator(cfg *config.Config, workerSets []WorkerRunners, comp compare.Comparator, filter *runner.FilterProcess) *Coordinator {
+func NewCoordinator(cfg *config.Config, workerSets []WorkerRunners, filter *runner.FilterProcess) *Coordinator {
 	seed := time.Now().UnixNano()
 	workers := make([]workerState, len(workerSets))
 	for i, ws := range workerSets {
@@ -72,6 +78,7 @@ func NewCoordinator(cfg *config.Config, workerSets []WorkerRunners, comp compare
 			id:            i,
 			runners:       ws.Harness,
 			serverRunners: ws.Servers,
+			comparator:    ws.Comparator,
 			mutator:       NewMutator(seed+int64(i), cfg.Campaign.MaxInputSize),
 			rng:           rand.New(rand.NewSource(seed + int64(i) + 1)),
 		}
@@ -80,7 +87,6 @@ func NewCoordinator(cfg *config.Config, workerSets []WorkerRunners, comp compare
 		cfg:          cfg,
 		workers:      workers,
 		corpus:       NewCorpus(cfg.Corpus.SeedDir, cfg.Corpus.CacheDir),
-		comparator:   comp,
 		filter:       filter,
 		stats:        NewStats(),
 		globalCov:    make([]byte, coverage.BitmapSize),
@@ -337,8 +343,8 @@ func (c *Coordinator) runWorker(ctx context.Context, cancel context.CancelFunc, 
 			}
 		}
 
-		// Compare outputs across targets.
-		if disc := c.comparator.Compare(input, outputs); disc != nil {
+		// Compare outputs across targets using this worker's comparator.
+		if disc := w.comparator.Compare(input, outputs); disc != nil {
 			covKey := sha256.Sum256(combinedCov)
 			c.findingMu.Lock()
 			if c.findingCovs[covKey] {
@@ -351,7 +357,7 @@ func (c *Coordinator) runWorker(ctx context.Context, cancel context.CancelFunc, 
 			shouldStop := c.maxFindings > 0 && c.findingsCount >= c.maxFindings
 			c.findingMu.Unlock()
 
-			minimized, minDisc := Minimize(disc.Input, w.runners, c.comparator)
+			minimized, minDisc := Minimize(disc.Input, w.runners, w.comparator)
 			if minDisc != nil {
 				disc = minDisc
 			} else {

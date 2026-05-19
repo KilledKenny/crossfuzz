@@ -332,6 +332,74 @@ func stopRunners(runners []runner.Runner) {
 	}
 }
 
+// targetSHMPaths returns the shared-memory file path of every target in a
+// worker set, keyed by target name. A harness comparator uses this to read
+// that specific worker's target outputs directly from shared memory.
+func targetSHMPaths(ws engine.WorkerRunners) map[string]string {
+	paths := make(map[string]string)
+	for _, r := range ws.Harness {
+		if p := r.SHMPath(); p != "" {
+			paths[r.Name()] = p
+		}
+	}
+	for _, s := range ws.Servers {
+		if p := s.SHMPath(); p != "" {
+			paths[s.Name()] = p
+		}
+	}
+	return paths
+}
+
+// buildComparator constructs the comparator configured in cfg. For the
+// "harness" type it launches a dedicated comparator process bound to the given
+// targets' shared-memory regions and returns a stop function for it; for every
+// other type the returned stop function is nil. Exits on configuration errors.
+func buildComparator(cfg *config.Config, targetSHMs map[string]string) (compare.Comparator, func()) {
+	switch cfg.Comparator.Type {
+	case "byte_equal", "":
+		return compare.ByteEqual{}, nil
+	case "json_structural":
+		return compare.JSONStructural{}, nil
+	case "numeric":
+		return compare.Numeric{}, nil
+	case "numeric_relative":
+		return compare.Numeric{Relative: true}, nil
+	case "none":
+		return compare.NoOp{}, nil
+	case "custom":
+		if cfg.Comparator.Script == "" {
+			fmt.Fprintf(os.Stderr, "Comparator type 'custom' requires a script path\n")
+			os.Exit(1)
+		}
+		return compare.Custom{Script: cfg.Comparator.Script}, nil
+	case "harness":
+		if cfg.Comparator.Binary == "" {
+			fmt.Fprintf(os.Stderr, "Comparator type 'harness' requires a binary path\n")
+			os.Exit(1)
+		}
+		cmpProc, err := runner.NewCompareProcess(runner.ProcessConfig{
+			Name:   "comparator",
+			Binary: cfg.Comparator.Binary,
+			Args:   cfg.Comparator.Args,
+			Env:    cfg.Comparator.Env,
+		}, targetSHMs)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error creating comparator: %v\n", err)
+			os.Exit(1)
+		}
+		if err := cmpProc.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error starting comparator: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Started comparator harness.")
+		return compare.Harness{Proc: cmpProc}, func() { cmpProc.Stop() }
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown comparator type: %s\n", cfg.Comparator.Type)
+		os.Exit(1)
+		return nil, nil // unreachable
+	}
+}
+
 // setupLogFile redirects os.Stdout to a tee that writes to both the original
 // stdout and the named file. The returned cleanup function must be called
 // (typically via defer) to flush and close the log file.
@@ -390,66 +458,22 @@ func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debug
 	startRunners(allFlat)
 	defer stopRunners(allFlat)
 
-	// Collect SHM paths from the first worker set (all workers have the same
-	// target names; the comparator only needs one set of paths).
-	targetSHMs := make(map[string]string)
-	if len(workerSets) > 0 {
-		ws := workerSets[0]
-		for _, r := range ws.Harness {
-			if p := r.SHMPath(); p != "" {
-				targetSHMs[r.Name()] = p
-			}
+	// Build a comparator per worker. A harness comparator reads target outputs
+	// directly from shared memory, so each worker needs its own CompareProcess
+	// bound to that worker's targets' SHM regions — a single shared comparator
+	// would make every worker compare worker 0's (concurrently mutated) outputs.
+	var compStops []func()
+	defer func() {
+		for _, stop := range compStops {
+			stop()
 		}
-		for _, s := range ws.Servers {
-			if p := s.SHMPath(); p != "" {
-				targetSHMs[s.Name()] = p
-			}
+	}()
+	for i := range workerSets {
+		comp, stop := buildComparator(cfg, targetSHMPaths(workerSets[i]))
+		workerSets[i].Comparator = comp
+		if stop != nil {
+			compStops = append(compStops, stop)
 		}
-	}
-
-	var comp compare.Comparator
-	switch cfg.Comparator.Type {
-	case "byte_equal", "":
-		comp = compare.ByteEqual{}
-	case "json_structural":
-		comp = compare.JSONStructural{}
-	case "numeric":
-		comp = compare.Numeric{}
-	case "numeric_relative":
-		comp = compare.Numeric{Relative: true}
-	case "none":
-		comp = compare.NoOp{}
-	case "custom":
-		if cfg.Comparator.Script == "" {
-			fmt.Fprintf(os.Stderr, "Comparator type 'custom' requires a script path\n")
-			os.Exit(1)
-		}
-		comp = compare.Custom{Script: cfg.Comparator.Script}
-	case "harness":
-		if cfg.Comparator.Binary == "" {
-			fmt.Fprintf(os.Stderr, "Comparator type 'harness' requires a binary path\n")
-			os.Exit(1)
-		}
-		cmpProc, err := runner.NewCompareProcess(runner.ProcessConfig{
-			Name:   "comparator",
-			Binary: cfg.Comparator.Binary,
-			Args:   cfg.Comparator.Args,
-			Env:    cfg.Comparator.Env,
-		}, targetSHMs)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error creating comparator: %v\n", err)
-			os.Exit(1)
-		}
-		if err := cmpProc.Start(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error starting comparator: %v\n", err)
-			os.Exit(1)
-		}
-		defer cmpProc.Stop()
-		fmt.Println("Started comparator harness.")
-		comp = compare.Harness{Proc: cmpProc}
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown comparator type: %s\n", cfg.Comparator.Type)
-		os.Exit(1)
 	}
 
 	// Start the input filter process if configured.
@@ -477,7 +501,7 @@ func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debug
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	coord := engine.NewCoordinator(cfg, workerSets, comp, filter)
+	coord := engine.NewCoordinator(cfg, workerSets, filter)
 	coord.SetWarmupRounds(warmup)
 	coord.SetValidateRounds(validate)
 	coord.SetMaxFindings(maxFindings)
