@@ -1,6 +1,6 @@
 {
-  "name": "crossfuzz-js-harness",
-  "version": "1.0.0",
+  "name": "@crossfuzz/crossfuzz",
+  "version": "0.0.1",
   "module": "crossfuzz.ts",
   "type": "module",
   "dependencies": {
