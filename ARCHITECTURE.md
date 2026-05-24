@@ -358,7 +358,7 @@ The harness provides:
 #### JavaScript Harness (`harness/js/`)
 
 ```javascript
-const crossfuzz = require('crossfuzz');
+const crossfuzz = require('@crossfuzz/crossfuzz');
 
 crossfuzz.run(function target(data) {
     // data is a Buffer, return a Buffer

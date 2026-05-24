@@ -2,7 +2,7 @@
  * Bun preload plugin for Istanbul coverage instrumentation.
  *
  * Load this before the target to enable coverage-guided fuzzing:
- *   bun run --preload ../../harness/js/instrument.ts ./target.ts
+ *   bun --preload @crossfuzz/crossfuzz/instrument.ts ./target.ts
  *
  * The plugin intercepts .ts and .js module loads (excluding node_modules and
  * the harness itself), transpiles .ts to JS via Bun.Transpiler, then instruments

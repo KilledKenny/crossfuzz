@@ -1,5 +1,5 @@
 findings
-cache
+corpus
 go_*_target
 *.class
 url_filter

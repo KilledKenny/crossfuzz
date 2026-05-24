@@ -57,7 +57,7 @@ Each language harness handles the pipe protocol, shared memory mapping, and cove
 - **C++** (`harness/cpp/`): thin wrapper over the C harness; must compile both `crossfuzz.c` (from `harness/c/`) and `crossfuzz.cpp` together with `-fsanitize-coverage=trace-pc-guard`
 - **Go** (`harness/gofuzz/`): uses `runtime/coverage` APIs; binary must be built with `-cover -covermode=atomic`. Use `-coverpkg` with an explicit package list (not just `./...`) to include stdlib/third-party packages the target delegates into — see examples for the `go list -deps` filter pattern. The `covCollector` runs a warmup phase to mask flaky bitmap slots from GC/allocator noise.
 - **Java** (`harness/java/`): Gradle project; custom `CoverageAgent`/`CoverageTransformer` via Java instrumentation API; produces `crossfuzz.jar`. Pass `-javaagent:crossfuzz.jar` at runtime.
-- **JavaScript/TypeScript** (`harness/js/`): runs under Bun. Istanbul-based AST instrumentation is applied via `bun run --preload ../../harness/js/instrument.ts`. The harness entry point is `crossfuzz.ts`; targets import `run` from it.
+- **JavaScript/TypeScript** (`harness/js/`): runs under Bun. Published as the `@crossfuzz/crossfuzz` npm package. Istanbul-based AST instrumentation is applied via `bun --preload @crossfuzz/crossfuzz/instrument.ts`. Targets import `run`/`fuzz` from `@crossfuzz/crossfuzz`.
 
 All harnesses support an `instrument` setting (default `true`) that can be set to `false` when the harness is a thin HTTP trigger and coverage should come entirely from an instrumented server process. Field names: Go `Settings{Instrument: false}`, C `{.instrument = 0}`, C++ `{.instrument = false}`, JS `{instrument: false}`, Python/Rust/Java `instrument = false`.
 

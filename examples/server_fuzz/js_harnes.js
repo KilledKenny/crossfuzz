@@ -1,4 +1,4 @@
-import { run } from "../../harness/js/crossfuzz";
+import { run } from "@crossfuzz/crossfuzz";
 const url = "http://127.0.0.1:8000";
 
 function fuzzInflate(bytes) {

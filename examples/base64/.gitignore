@@ -1,5 +1,10 @@
 findings
-cache
+corpus
 c_target
 go_target_bin
 cpp_target
+node_modules
+
+# Dont commit lock files since they are refering to a pkg published form this repo.
+bun.lock
+package-lock.json

@@ -75,8 +75,8 @@ build_cmd = "cd ../../harness/java && gradle jar && cd - && javac -cp ../../harn
 **JavaScript / TypeScript (Bun)**
 ```toml
 binary = "bun"
-args   = ["run", "--preload", "../../harness/js/instrument.ts", "./target.ts"]
-build_cmd = "cd ../../harness/js && bun install"
+args   = ["run", "--preload", "@crossfuzz/crossfuzz/instrument.ts", "./target.ts"]
+build_cmd = "bun add @crossfuzz/crossfuzz"
 ```
 
 ### `type = "server"`
@@ -96,7 +96,7 @@ name     = "js_harness"
 type     = "harness"
 language = "js"
 binary   = "bun"
-args     = ["run", "--preload", "../../harness/js/instrument.ts", "./harness.ts"]
+args     = ["run", "--preload", "@crossfuzz/crossfuzz/instrument.ts", "./harness.ts"]
 ```
 
 See `examples/server_fuzz/` for a working multi-server example.
@@ -187,8 +187,8 @@ build_cmd = "cd go_target && PKGS=$(go list -deps . | grep -vE '^(runtime$|runti
 name = "ts_base64"
 language = "js"
 binary = "bun"
-args = ["run", "--preload", "../../harness/js/instrument.ts", "./target_ts.ts"]
-build_cmd = "cd ../../harness/js && bun install"
+args = ["run", "--preload", "@crossfuzz/crossfuzz/instrument.ts", "./target_ts.ts"]
+build_cmd = "bun add @crossfuzz/crossfuzz"
 
 [comparator]
 type = "byte_equal"

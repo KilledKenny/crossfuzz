@@ -32,8 +32,8 @@ build_cmd = "cd ../../harness/java && gradle jar && cd - && javac -cp ../../harn
 name = "ts_json"
 language = "js"
 binary = "bun"
-args = ["run", "--preload", "../../harness/js/instrument.ts", "./ts_target.ts"]
-build_cmd = "cd ../../harness/js && bun install"
+args = ["run", "--preload", "@crossfuzz/crossfuzz/instrument.ts", "./ts_target.ts"]
+build_cmd = "bun add @crossfuzz/crossfuzz"
 
 [comparator]
 type = "byte_equal"

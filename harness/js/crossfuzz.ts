@@ -2,12 +2,12 @@
  * cross_fuzz harness for JavaScript/TypeScript targets running under Bun.
  *
  * Usage:
- *   import { fuzz } from "../../harness/js/crossfuzz";
+ *   import { fuzz } from "@crossfuzz/crossfuzz";
  *   fuzz((input: Uint8Array): Uint8Array => { ... });
  *
  * Shared memory is mapped via Bun.mmap(). Coverage is collected from the
  * Istanbul __coverage__ global if present (enabled by preloading instrument.ts):
- *   bun run --preload ../../harness/js/instrument.ts ./target.ts
+ *   bun --preload @crossfuzz/crossfuzz/instrument.ts ./target.ts
  */
 
 import { readSync, writeSync, openSync } from "node:fs";

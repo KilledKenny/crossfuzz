@@ -46,7 +46,7 @@ name     = "js_client"
 type     = "harness"          # Sends HTTP requests and reports results
 language = "js"
 binary   = "bun"
-args     = ["run", "--preload", "../../harness/js/instrument.ts", "./client.ts"]
+args     = ["run", "--preload", "@crossfuzz/crossfuzz/instrument.ts", "./client.ts"]
 ```
 
 When coverage should come entirely from the server and the harness is a thin HTTP trigger, set `instrument: false` in the harness's Settings.

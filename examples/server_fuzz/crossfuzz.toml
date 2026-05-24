@@ -36,8 +36,8 @@ name = "js_harnes"
 language = "js"
 binary = "bun"
 type = "harness"
-args = ["run", "--preload", "../../harness/js/instrument.ts", "./js_harnes.js"]
-build_cmd = "cd ../../harness/js && bun install"
+args = ["run", "--preload", "@crossfuzz/crossfuzz/instrument.ts", "./js_harnes.js"]
+build_cmd = "bun add @crossfuzz/crossfuzz"
 
 [comparator]
 type = "none"

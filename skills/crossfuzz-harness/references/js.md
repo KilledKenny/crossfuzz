@@ -5,15 +5,15 @@ The JS harness runs under **Bun** (not Node). Coverage uses Istanbul AST instrum
 ## Setup
 
 ```bash
-cd harness/js && bun install
+bun add @crossfuzz/crossfuzz
 ```
 
-Installs Istanbul and Bun dependencies. Only needed once (or after updating the repo).
+Installs the harness package (published as `@crossfuzz/crossfuzz`).
 
 ## Fuzz target
 
 ```typescript
-import { fuzz } from "../../harness/js/crossfuzz";
+import { fuzz } from "@crossfuzz/crossfuzz";
 
 fuzz((input: Uint8Array): Uint8Array => {
     // Throw to mark execution as error-status.
@@ -32,7 +32,7 @@ export async function fuzz(target: FuzzFn, settings?: Settings): Promise<void>
 ## Running with coverage
 
 ```bash
-bun run --preload ../../harness/js/instrument.ts ./target.ts
+bun --preload @crossfuzz/crossfuzz/instrument.ts ./target.ts
 ```
 
 `--preload instrument.ts` applies Istanbul AST instrumentation at load time so all your source files are coverage-instrumented. Without it the binary runs but produces no coverage signal.
@@ -44,8 +44,8 @@ bun run --preload ../../harness/js/instrument.ts ./target.ts
 name = "ts_impl"
 language = "js"
 binary = "bun"
-args = ["run", "--preload", "../../harness/js/instrument.ts", "./target.ts"]
-build_cmd = "cd ../../harness/js && bun install"
+args = ["run", "--preload", "@crossfuzz/crossfuzz/instrument.ts", "./target.ts"]
+build_cmd = "bun add @crossfuzz/crossfuzz"
 ```
 
 Both `.js` and `.ts` files use `language = "js"`.
@@ -53,7 +53,7 @@ Both `.js` and `.ts` files use `language = "js"`.
 ## Settings
 
 ```typescript
-import { fuzz, Settings } from "../../harness/js/crossfuzz";
+import { fuzz, Settings } from "@crossfuzz/crossfuzz";
 
 fuzz(myTarget, {
     instrument: true,    // default: true — set false when harness is thin HTTP client
@@ -69,7 +69,7 @@ fuzz(myTarget, {
 ## Filter target
 
 ```typescript
-import { filter, FilterResult } from "../../harness/js/crossfuzz";
+import { filter, FilterResult } from "@crossfuzz/crossfuzz";
 
 filter((input: Uint8Array): FilterResult => {
     if (input.length < 4) {
@@ -95,7 +95,7 @@ Configure as `[input_filter]`.
 ## Compare target
 
 ```typescript
-import { compare } from "../../harness/js/crossfuzz";
+import { compare } from "@crossfuzz/crossfuzz";
 
 compare((input: Uint8Array, names: string[], outputs: Uint8Array[]): string => {
     if (outputs.length < 2) return "";
@@ -117,7 +117,7 @@ Configure as `[comparator] type = "harness"`.
 ## Server mode (standalone functions)
 
 ```typescript
-import { openShm, clearInstrumentation, collectInstrumentation } from "../../harness/js/crossfuzz";
+import { openShm, clearInstrumentation, collectInstrumentation } from "@crossfuzz/crossfuzz";
 
 const shm = openShm();
 clearInstrumentation();
@@ -139,6 +139,6 @@ fuzz(async (input: Uint8Array): Promise<Uint8Array> => {
 
 - **Missing `--preload instrument.ts`**: binary runs but produces no coverage.
 - **Using Node instead of Bun**: the harness uses `Bun.mmap()`. Node is not supported.
-- **Not running `bun install` in `harness/js/`**: Istanbul won't be available.
+- **Not running `bun add @crossfuzz/crossfuzz`**: harness package and Istanbul won't be available.
 - **Output larger than 1 MB**: the harness clamps automatically.
 - **Returning `null` or `undefined`**: treated as empty output, not an error. Throw to signal error.

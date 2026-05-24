@@ -5,10 +5,10 @@
  *   bun run ./target.ts
  *
  * Run with Istanbul coverage instrumentation (recommended):
- *   bun run --preload ../../harness/js/instrument.ts ./target.ts
+ *   bun --preload @crossfuzz/crossfuzz/instrument.ts ./target.ts
  */
 
-import { fuzz } from "../../harness/js/crossfuzz";
+import { fuzz } from "@crossfuzz/crossfuzz";
 
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
