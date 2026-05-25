@@ -1,5 +1,5 @@
 findings
 corpus
-go_*_target
-*.class
+go/go_*_target
+java/*.class
 url_filter

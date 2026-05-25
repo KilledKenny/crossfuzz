@@ -477,16 +477,20 @@ cross_fuzz/
 │       └── package.json
 └── examples/
     ├── base64/                     # Base64 encode/decode across languages
-    │   ├── c_target.c
-    │   ├── go_target.go
-    │   ├── js_target.js
+    │   ├── c/c_target.c
+    │   ├── cpp/cpp_target.cpp
+    │   ├── go/main.go
+    │   ├── js/target_js.js
+    │   ├── js/target_ts.ts
+    │   ├── python/python_target.py
+    │   ├── rust/
     │   ├── seeds/
     │   └── crossfuzz.toml
     └── json_parse/                 # JSON parser differential fuzz
-        ├── c_target.c
-        ├── go_target.go
-        ├── java_target.java
-        ├── js_target.js
+        ├── c/c_target.c
+        ├── go/main.go
+        ├── java/JavaTarget.java
+        ├── js/ts_target.ts
         ├── seeds/
         └── crossfuzz.toml
 ```

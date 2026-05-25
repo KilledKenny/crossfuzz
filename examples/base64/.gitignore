@@ -1,8 +1,8 @@
 findings
 corpus
-c_target
-go_target_bin
-cpp_target
+c/c_target
+cpp/cpp_target
+go/go_target_bin
 node_modules
 
 # Dont commit lock files since they are refering to a pkg published form this repo.

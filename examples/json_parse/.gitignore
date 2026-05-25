@@ -1,5 +1,5 @@
 findings
 corpus
-c_target
-go_target_bin
-JavaTarget.class
+c/c_target
+go/go_target_bin
+java/*.class
