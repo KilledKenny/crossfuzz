@@ -34,6 +34,12 @@ type CampaignConfig struct {
 	Timeout      Duration `toml:"timeout"`
 	ExecTimeout  Duration `toml:"exec_timeout"`
 	MaxInputSize int      `toml:"max_input_size"`
+	// DictFile is an optional path to an AFL-format token dictionary fed to
+	// the mutator's dict_overwrite/dict_insert strategies.
+	DictFile string `toml:"dict_file"`
+	// Dicts is an optional inline list of dictionary tokens, applied in
+	// addition to DictFile and any comparator-derived defaults.
+	Dicts []string `toml:"dicts"`
 }
 
 // CorpusConfig specifies corpus directories.

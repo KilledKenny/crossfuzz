@@ -13,6 +13,7 @@ type Stats struct {
 	startTime   time.Time
 	totalExecs  uint64
 	rejected    uint64
+	duplicates  uint64
 	corpusSize  int
 	coverBits   int
 	findings    int
@@ -45,6 +46,15 @@ func (s *Stats) RecordExec() {
 func (s *Stats) RecordRejected() {
 	s.mu.Lock()
 	s.rejected++
+	s.mu.Unlock()
+}
+
+// RecordDuplicate counts an input that was filtered out by the duplicate-input
+// bloom filter (skipped before execution). It does not count toward
+// totalExecs.
+func (s *Stats) RecordDuplicate() {
+	s.mu.Lock()
+	s.duplicates++
 	s.mu.Unlock()
 }
 
@@ -101,8 +111,8 @@ func (s *Stats) PrintIfDue() {
 	elapsed := time.Since(s.startTime)
 	execsPerSec := float64(s.totalExecs) / elapsed.Seconds()
 
-	line := fmt.Sprintf("\r\033[2K[%s] execs: %d (%.0f/sec) | rejected: %d | corpus: %d | coverage: %d edges | findings: %d | crashes: %d | timeouts: %d",
-		elapsed.Truncate(time.Second), s.totalExecs, execsPerSec, s.rejected,
+	line := fmt.Sprintf("\r\033[2K[%s] execs: %d (%.0f/sec) | rejected: %d | dup: %d | corpus: %d | coverage: %d edges | findings: %d | crashes: %d | timeouts: %d",
+		elapsed.Truncate(time.Second), s.totalExecs, execsPerSec, s.rejected, s.duplicates,
 		s.corpusSize, s.coverBits, s.findings, s.crashes, s.timeouts)
 
 	if s.debugEdge && len(s.targetEdges) > 0 {

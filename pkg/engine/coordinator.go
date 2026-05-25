@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -47,6 +48,13 @@ type workerState struct {
 	filter        *runner.FilterProcess
 	mutator       *Mutator
 	rng           *rand.Rand
+	// dedup skips inputs that this worker has already executed. False
+	// positives are tolerable; they cost at most a few re-executions.
+	dedup *bloom
+	// stuckExecs counts iterations since this worker last added a new
+	// corpus entry. Used to ramp up the splice rate when havoc stops
+	// finding new edges.
+	stuckExecs int
 }
 
 // Coordinator drives the fuzzing campaign.
@@ -74,8 +82,14 @@ type Coordinator struct {
 // processes, its own comparator, and its own input filter (which may be nil);
 // the worker runs the fuzzing loop concurrently with the others, sharing the
 // corpus and global coverage bitmap.
-func NewCoordinator(cfg *config.Config, workerSets []WorkerRunners) *Coordinator {
+func NewCoordinator(cfg *config.Config, workerSets []WorkerRunners) (*Coordinator, error) {
 	seed := time.Now().UnixNano()
+
+	dict, err := buildDict(cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	workers := make([]workerState, len(workerSets))
 	for i, ws := range workerSets {
 		workers[i] = workerState{
@@ -84,8 +98,9 @@ func NewCoordinator(cfg *config.Config, workerSets []WorkerRunners) *Coordinator
 			serverRunners: ws.Servers,
 			comparator:    ws.Comparator,
 			filter:        ws.Filter,
-			mutator:       NewMutator(seed+int64(i), cfg.Campaign.MaxInputSize),
+			mutator:       NewMutator(seed+int64(i), cfg.Campaign.MaxInputSize, dict),
 			rng:           rand.New(rand.NewSource(seed + int64(i) + 1)),
+			dedup:         newBloom(),
 		}
 	}
 	return &Coordinator{
@@ -96,7 +111,23 @@ func NewCoordinator(cfg *config.Config, workerSets []WorkerRunners) *Coordinator
 		globalCov:    make([]byte, coverage.BitmapSize),
 		perTargetCov: make(map[string][]byte),
 		findingCovs:  make(map[[32]byte]bool),
+	}, nil
+}
+
+// buildDict assembles the mutator dictionary from three sources, in order:
+// comparator-derived defaults, the optional [campaign] dict_file, and inline
+// [campaign] dicts entries. Returns a non-nil *Dict (possibly empty).
+func buildDict(cfg *config.Config) (*Dict, error) {
+	d := DefaultDictForComparator(cfg.Comparator.Type)
+	if cfg.Campaign.DictFile != "" {
+		if err := d.LoadFile(cfg.Campaign.DictFile); err != nil {
+			return nil, fmt.Errorf("dict: %w", err)
+		}
 	}
+	for _, tok := range cfg.Campaign.Dicts {
+		d.Add([]byte(tok))
+	}
+	return d, nil
 }
 
 // SetWarmupRounds configures the number of warmup rounds to run before the
@@ -270,7 +301,11 @@ func (c *Coordinator) Run(ctx context.Context) error {
 // runWorker is the inner fuzzing loop executed by a single worker goroutine.
 // It shares the corpus and globalCov with sibling workers via the coordinator.
 func (c *Coordinator) runWorker(ctx context.Context, cancel context.CancelFunc, w *workerState) error {
-	spliceRate := 10
+	const (
+		spliceRateHot   = 15 // probability denom while havoc still produces new edges
+		spliceRateStuck = 5  // … when we have not added a corpus entry for a while
+		stuckThreshold  = 5000
+	)
 
 	for {
 		select {
@@ -279,14 +314,41 @@ func (c *Coordinator) runWorker(ctx context.Context, cancel context.CancelFunc, 
 		default:
 		}
 
-		// Generate input: mostly mutate, occasionally splice.
+		// Generate input: pick a base via the power schedule, mostly mutate,
+		// occasionally splice. spliceRate ramps up once the worker has not
+		// added a corpus entry in a while — havoc has plateaued, so cross
+		// pollination from another seed is more likely to break out.
+		spliceRate := spliceRateHot
+		if w.stuckExecs > stuckThreshold {
+			spliceRate = spliceRateStuck
+		}
+
 		var input []byte
-		base := c.corpus.Pick(w.rng)
+		var fromSplice bool
+		parent := c.corpus.PickWeighted(w.rng)
+		var base []byte
+		if parent != nil {
+			base = parent.Data
+		}
 		if c.corpus.Len() > 1 && w.rng.Intn(spliceRate) == 0 {
-			other := c.corpus.Pick(w.rng)
-			input = w.mutator.Splice(base, other)
+			other := c.corpus.PickRandom(w.rng)
+			var otherData []byte
+			if other != nil {
+				otherData = other.Data
+			}
+			input = w.mutator.Splice(base, otherData)
+			fromSplice = true
 		} else {
 			input = w.mutator.Mutate(base)
+		}
+
+		// Skip inputs this worker has already executed. Splice products
+		// bypass the check — they are more likely to be genuinely novel,
+		// and getting them in front of the comparator early matters more
+		// than saving a duplicate exec.
+		if !fromSplice && w.dedup.CheckAndAdd(input) {
+			c.stats.RecordDuplicate()
+			continue
 		}
 
 		// Run this worker's input filter (if configured) before sending to targets.
@@ -305,8 +367,17 @@ func (c *Coordinator) runWorker(ctx context.Context, cancel context.CancelFunc, 
 			}
 		}
 
-		// Execute on all targets.
+		// Snapshot the mutation ops fired by this iteration before any
+		// subsequent mutator call (e.g. via Splice in another loop) clobbers
+		// them. Splice clears LastOps, so for splice products this is empty
+		// and the bandit gets no signal.
+		opsThisIter := append([]int(nil), w.mutator.LastOps()...)
+
+		// Execute on all targets and time the round. Per-target timings are
+		// folded into a mean exec time used by the power schedule.
+		execStart := time.Now()
 		outputs, perTargetCov, combinedCov, execErr := c.executeAll(w, input)
+		execElapsed := time.Since(execStart)
 		if execErr != nil {
 			if !errors.Is(execErr, errSkipIteration) {
 				fmt.Printf("\nExec error: %v\n", execErr)
@@ -315,6 +386,7 @@ func (c *Coordinator) runWorker(ctx context.Context, cancel context.CancelFunc, 
 		}
 
 		c.stats.RecordExec()
+		w.stuckExecs++
 
 		// Check for new coverage. Re-run to filter out flaky edges —
 		// Go's runtime/coverage instrumentation still emits a small
@@ -325,6 +397,15 @@ func (c *Coordinator) runWorker(ctx context.Context, cancel context.CancelFunc, 
 		c.covMu.Lock()
 		isNew := coverage.HasNewBits(c.globalCov, combinedCov)
 		c.covMu.Unlock()
+
+		// Credit the bandit. New-edge → reward 1, otherwise 0.
+		if len(opsThisIter) > 0 {
+			reward := 0.0
+			if isNew {
+				reward = 1.0
+			}
+			w.mutator.Reward(opsThisIter, reward)
+		}
 
 		if isNew {
 			stable := true
@@ -337,9 +418,18 @@ func (c *Coordinator) runWorker(ctx context.Context, cancel context.CancelFunc, 
 			}
 			if stable {
 				c.covMu.Lock()
+				newEdges := coverage.CountBits(combinedCov)
 				coverage.Merge(c.globalCov, combinedCov)
 				c.covMu.Unlock()
-				if c.corpus.Add(input) {
+
+				if s := c.corpus.Add(input); s != nil {
+					// Skew = stddev/mean of per-target edge counts.
+					// Inputs with high skew exercise some implementations
+					// much more than others — exactly the inputs whose
+					// neighbourhood we want to re-explore for diff bugs.
+					c.corpus.Annotate(s, newEdges, execElapsed.Nanoseconds(),
+						perTargetSkew(perTargetCov))
+					w.stuckExecs = 0
 					if err := c.corpus.Save(input); err != nil {
 						fmt.Printf("\n[WARN] failed to save corpus entry: %v\n", err)
 					}
@@ -360,6 +450,10 @@ func (c *Coordinator) runWorker(ctx context.Context, cancel context.CancelFunc, 
 			findingID := c.findingsCount
 			shouldStop := c.maxFindings > 0 && c.findingsCount >= c.maxFindings
 			c.findingMu.Unlock()
+
+			// Parent seed produced an oracle-positive child — boost its
+			// energy so the schedule re-explores its neighbourhood.
+			c.corpus.BumpDivergence(parent, 1.0)
 
 			minimized, minDisc := Minimize(disc.Input, w.runners, w.comparator)
 			if minDisc != nil {
@@ -408,6 +502,35 @@ func (c *Coordinator) runWorker(ctx context.Context, cancel context.CancelFunc, 
 // errSkipIteration is returned by executeAll when a crash or timeout was
 // detected, saved, and the iteration should be skipped without aborting the campaign.
 var errSkipIteration = errors.New("skip iteration")
+
+// perTargetSkew returns the coefficient of variation (stddev / mean) of edge
+// counts across targets. Zero when all targets exercise the same number of
+// edges; rises as one implementation hits paths the others miss. Used as a
+// differential-fuzzing energy multiplier in the power schedule.
+func perTargetSkew(perTargetCov map[string][]byte) float64 {
+	if len(perTargetCov) < 2 {
+		return 0
+	}
+	counts := make([]float64, 0, len(perTargetCov))
+	for _, cov := range perTargetCov {
+		counts = append(counts, float64(coverage.CountBits(cov)))
+	}
+	var sum float64
+	for _, v := range counts {
+		sum += v
+	}
+	mean := sum / float64(len(counts))
+	if mean <= 0 {
+		return 0
+	}
+	var ss float64
+	for _, v := range counts {
+		d := v - mean
+		ss += d * d
+	}
+	std := math.Sqrt(ss / float64(len(counts)))
+	return std / mean
+}
 
 // executeAll runs input through all harness targets and collects coverage
 // from server targets. Returns outputs from harness runners, a per-target

@@ -107,6 +107,37 @@ func (m *Mutator) deleteBytes(data []byte) []byte {
 	return result
 }
 
+func (m *Mutator) dictOverwrite(data []byte) []byte {
+	if m.dict == nil || m.dict.Len() == 0 || len(data) == 0 {
+		return data
+	}
+	tok := m.dict.Pick(m.rng)
+	if len(tok) > len(data) {
+		// Pad data so the token fits; this is rare for typical dict entries.
+		extra := make([]byte, len(tok)-len(data))
+		data = append(data, extra...)
+	}
+	pos := m.rng.Intn(len(data) - len(tok) + 1)
+	copy(data[pos:], tok)
+	return data
+}
+
+func (m *Mutator) dictInsert(data []byte) []byte {
+	if m.dict == nil || m.dict.Len() == 0 {
+		return data
+	}
+	tok := m.dict.Pick(m.rng)
+	pos := 0
+	if len(data) > 0 {
+		pos = m.rng.Intn(len(data) + 1)
+	}
+	result := make([]byte, 0, len(data)+len(tok))
+	result = append(result, data[:pos]...)
+	result = append(result, tok...)
+	result = append(result, data[pos:]...)
+	return result
+}
+
 func (m *Mutator) duplicateChunk(data []byte) []byte {
 	if len(data) < 2 {
 		return data

@@ -525,7 +525,11 @@ func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debug
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
 
-	coord := engine.NewCoordinator(cfg, workerSets)
+	coord, err := engine.NewCoordinator(cfg, workerSets)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Coordinator init: %v\n", err)
+		os.Exit(1)
+	}
 	coord.SetWarmupRounds(warmup)
 	coord.SetValidateRounds(validate)
 	coord.SetMaxFindings(maxFindings)
