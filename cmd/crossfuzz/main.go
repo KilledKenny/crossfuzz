@@ -107,6 +107,7 @@ func runCmd() *cobra.Command {
 		debugEdge   bool
 		logFile     string
 		workers     int
+		stopAfter   string
 	)
 
 	cmd := &cobra.Command{
@@ -124,7 +125,11 @@ func runCmd() *cobra.Command {
 			if cmd.Flags().Changed("findings") || cfg.Corpus.FindingsDir == "" {
 				cfg.Corpus.FindingsDir = findings
 			}
-			cmdRun(cfg, warmup, validate, maxFindings, debugEdge, memLimit, workers, build, logFile)
+			stopExecs, stopDur, err := parseStopAfter(stopAfter)
+			if err != nil {
+				return err
+			}
+			cmdRun(cfg, warmup, validate, maxFindings, debugEdge, memLimit, workers, build, logFile, stopExecs, stopDur)
 			return nil
 		},
 	}
@@ -138,6 +143,7 @@ func runCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&debugEdge, "debug-edge", false, "Print per-target edge counts in status ticker")
 	cmd.Flags().StringVar(&logFile, "log-file", "", "Also write all stdout output to this file")
 	cmd.Flags().IntVar(&workers, "workers", 1, "Number of parallel fuzzing workers, each with their own target processes")
+	cmd.Flags().StringVar(&stopAfter, "stop-after", "", "Stop after N executions per worker (integer) or after a duration (e.g. 30s, 2m). Per-worker counter for integer mode — total is N*workers.")
 
 	return cmd
 }
@@ -460,7 +466,31 @@ func setupLogFile(path string) func() {
 	}
 }
 
-func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debugEdge bool, memLimit uint64, numWorkers int, build bool, logFile string) {
+// parseStopAfter parses the --stop-after argument. An empty string disables
+// stop-after entirely. A bare integer is interpreted as a per-worker exec cap;
+// anything else is passed to time.ParseDuration. Returns (execs, duration)
+// with exactly one non-zero on success.
+func parseStopAfter(s string) (int, time.Duration, error) {
+	if s == "" {
+		return 0, 0, nil
+	}
+	if n, err := strconv.Atoi(s); err == nil {
+		if n < 0 {
+			return 0, 0, fmt.Errorf("invalid --stop-after %q: integer must be >= 0", s)
+		}
+		return n, 0, nil
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return 0, 0, fmt.Errorf("invalid --stop-after %q: expected integer (per-worker exec count) or duration (e.g. 30s): %w", s, err)
+	}
+	if d < 0 {
+		return 0, 0, fmt.Errorf("invalid --stop-after %q: duration must be >= 0", s)
+	}
+	return 0, d, nil
+}
+
+func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debugEdge bool, memLimit uint64, numWorkers int, build bool, logFile string, stopAfterExecs int, stopAfterDuration time.Duration) {
 	if numWorkers < 1 {
 		fmt.Fprintf(os.Stderr, "--workers must be at least 1\n")
 		os.Exit(1)
@@ -534,6 +564,7 @@ func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debug
 	coord.SetValidateRounds(validate)
 	coord.SetMaxFindings(maxFindings)
 	coord.SetDebugEdge(debugEdge)
+	coord.SetStopAfter(stopAfterExecs, stopAfterDuration)
 	if err := coord.Run(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "Campaign error: %v\n", err)
 		os.Exit(1)

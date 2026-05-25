@@ -75,6 +75,15 @@ type Coordinator struct {
 	warmupRounds   int
 	validateRounds int
 	maxFindings    int
+
+	// stopAfterExecs caps the number of fuzz inputs each parallel worker will
+	// execute before it returns. Zero means no per-worker cap. The counter is
+	// strictly per-worker (no shared lock); total execs across the campaign
+	// are roughly stopAfterExecs * numWorkers.
+	stopAfterExecs int
+	// stopAfterDuration wall-clocks the entire campaign on top of any
+	// configured [campaign].timeout. Zero means no extra cap.
+	stopAfterDuration time.Duration
 }
 
 // NewCoordinator creates a coordinator for the given config and worker sets.
@@ -152,6 +161,17 @@ func (c *Coordinator) SetMaxFindings(n int) {
 // SetDebugEdge enables per-target edge counts in the status ticker output.
 func (c *Coordinator) SetDebugEdge(enabled bool) {
 	c.stats.SetDebugEdge(enabled)
+}
+
+// SetStopAfter configures early-termination conditions for the campaign.
+// execsPerWorker > 0 caps each parallel worker at that many executed inputs
+// (the counter is per-worker, with no shared synchronisation, so the total
+// across N workers is roughly execsPerWorker * N). duration > 0 layers an
+// additional wall-clock timeout on top of [campaign].timeout — whichever
+// signal fires first wins. Either or both may be zero.
+func (c *Coordinator) SetStopAfter(execsPerWorker int, duration time.Duration) {
+	c.stopAfterExecs = execsPerWorker
+	c.stopAfterDuration = duration
 }
 
 // validateStability runs input through all runners n times and checks whether
@@ -266,6 +286,13 @@ func (c *Coordinator) Run(ctx context.Context) error {
 		ctx, cancel = context.WithTimeout(ctx, c.cfg.Campaign.Timeout.Duration)
 		defer cancel()
 	}
+	// --stop-after duration: layered on top of [campaign].timeout so the
+	// earliest signal wins.
+	if c.stopAfterDuration > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.stopAfterDuration)
+		defer cancel()
+	}
 
 	// workerCtx lets any worker cancel all others (e.g. on max-findings).
 	workerCtx, cancelWorkers := context.WithCancel(ctx)
@@ -306,6 +333,10 @@ func (c *Coordinator) runWorker(ctx context.Context, cancel context.CancelFunc, 
 		spliceRateStuck = 5  // … when we have not added a corpus entry for a while
 		stuckThreshold  = 5000
 	)
+
+	// Per-worker exec cap from --stop-after <N>. Strictly local — no shared
+	// counter, no lock — so N workers run roughly N*cap total inputs.
+	var execsThisWorker int
 
 	for {
 		select {
@@ -387,6 +418,7 @@ func (c *Coordinator) runWorker(ctx context.Context, cancel context.CancelFunc, 
 
 		c.stats.RecordExec()
 		w.stuckExecs++
+		execsThisWorker++
 
 		// Check for new coverage. Re-run to filter out flaky edges —
 		// Go's runtime/coverage instrumentation still emits a small
@@ -496,6 +528,13 @@ func (c *Coordinator) runWorker(ctx context.Context, cancel context.CancelFunc, 
 
 		c.stats.Update(c.corpus.Len(), covBits, findingsSnapshot, targetEdges)
 		c.stats.PrintIfDue()
+
+		// --stop-after <N>: this worker has hit its per-worker exec cap.
+		// Return now that the current iteration's coverage merge, finding
+		// save, and stats update have all completed.
+		if c.stopAfterExecs > 0 && execsThisWorker >= c.stopAfterExecs {
+			return nil
+		}
 	}
 }
 
