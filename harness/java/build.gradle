@@ -1,6 +1,12 @@
 plugins {
     id 'java'
+    id 'maven-publish'
+    id 'signing'
+    id 'com.gradleup.nmcp' version '0.1.3'
 }
+
+group = 'io.killedkenny.crossfuzz'
+version = '0.0.1'
 
 // Pin the bytecode version. Without this, `gradle jar` emits class files for
 // whatever JDK built it (e.g. JDK 25 -> class version 69), which an older
@@ -8,6 +14,11 @@ plugins {
 // crash during init, not a catchable error.
 tasks.withType(JavaCompile).configureEach {
     options.release = 17
+}
+
+java {
+    withSourcesJar()
+    withJavadocJar()
 }
 
 repositories {
@@ -30,9 +41,8 @@ sourceSets {
 jar {
     manifest {
         attributes(
-            'Premain-Class': 'crossfuzz.CoverageAgent',
-            'Can-Retransform-Classes': 'true',
-            'Main-Class': 'crossfuzz.Harness'
+            'Premain-Class': 'io.killedkenny.crossfuzz.CoverageAgent',
+            'Can-Retransform-Classes': 'true'
         )
     }
     from {
@@ -40,4 +50,60 @@ jar {
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     archiveFileName = 'crossfuzz.jar'
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            groupId = 'io.killedkenny.crossfuzz'
+            artifactId = 'crossfuzz'
+            version = project.version
+
+            from components.java
+
+            pom {
+                name = 'crossfuzz Java Harness'
+                description = 'Java harness for cross-language differential fuzzing with crossfuzz'
+                url = 'https://github.com/KilledKenny/cross_fuzz'
+
+                licenses {
+                    license {
+                        name = 'MIT License'
+                        url = 'https://opensource.org/licenses/MIT'
+                    }
+                }
+
+                developers {
+                    developer {
+                        id = 'killedkenny'
+                        name = 'Simon Rawet'
+                        email = 'Simon@rawet.se'
+                    }
+                }
+
+                scm {
+                    connection = 'scm:git:git://github.com/KilledKenny/cross_fuzz.git'
+                    developerConnection = 'scm:git:ssh://github.com/KilledKenny/cross_fuzz.git'
+                    url = 'https://github.com/KilledKenny/cross_fuzz'
+                }
+            }
+        }
+    }
+}
+
+signing {
+    def signingKey = System.getenv('GPG_SIGNING_KEY')
+    def signingPassword = System.getenv('GPG_SIGNING_PASSWORD') ?: ''
+    if (signingKey) {
+        useInMemoryPgpKeys(signingKey, signingPassword)
+        sign publishing.publications.mavenJava
+    }
+}
+
+nmcp {
+    publish('mavenJava') {
+        username = System.getenv('MAVEN_CENTRAL_USERNAME') ?: ''
+        password = System.getenv('MAVEN_CENTRAL_PASSWORD') ?: ''
+        publicationType = 'AUTOMATIC'
+    }
 }

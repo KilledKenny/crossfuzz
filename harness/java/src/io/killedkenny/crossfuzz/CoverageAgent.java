@@ -1,4 +1,4 @@
-package crossfuzz;
+package io.killedkenny.crossfuzz;
 
 import java.io.RandomAccessFile;
 import java.lang.instrument.Instrumentation;

@@ -19,7 +19,7 @@ public class JavaReverseProxy {
     static final HttpClient client = HttpClient.newHttpClient();
 
     public static void main(String[] args) throws Exception {
-        crossfuzz.Crossfuzz.initServer();
+        io.killedkenny.crossfuzz.Crossfuzz.initServer();
 
         int port = 8080;
 
@@ -38,7 +38,7 @@ public class JavaReverseProxy {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             try {
-                crossfuzz.CoverageRuntime.clear();
+                io.killedkenny.crossfuzz.CoverageRuntime.clear();
                 String method = exchange.getRequestMethod();
                 String path = exchange.getRequestURI().toString();
 
@@ -58,7 +58,7 @@ public class JavaReverseProxy {
                         builder.header(k, String.join(",", v));
                     }
                 });
-                crossfuzz.CoverageRuntime.collect();
+                io.killedkenny.crossfuzz.CoverageRuntime.collect();
                 HttpResponse<byte[]> response = client.send(
                         builder.build(),
                         HttpResponse.BodyHandlers.ofByteArray()

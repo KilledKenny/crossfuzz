@@ -1,4 +1,4 @@
-package crossfuzz;
+package io.killedkenny.crossfuzz;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;

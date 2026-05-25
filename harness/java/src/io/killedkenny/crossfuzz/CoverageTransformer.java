@@ -1,4 +1,4 @@
-package crossfuzz;
+package io.killedkenny.crossfuzz;
 
 import java.lang.instrument.ClassFileTransformer;
 import java.security.ProtectionDomain;
@@ -22,7 +22,7 @@ import org.objectweb.asm.tree.TryCatchBlockNode;
 public class CoverageTransformer implements ClassFileTransformer {
 
     private static final String[] EXCLUDED = {
-        "crossfuzz/", "java/", "javax/", "sun/", "com/sun/",
+        "io/killedkenny/crossfuzz/", "java/", "javax/", "sun/", "com/sun/",
         "jdk/", "org/objectweb/asm/"
     };
 
@@ -131,7 +131,7 @@ public class CoverageTransformer implements ClassFileTransformer {
         InsnList l = new InsnList();
         l.add(new LdcInsnNode(idx));
         l.add(new MethodInsnNode(Opcodes.INVOKESTATIC,
-            "crossfuzz/CoverageRuntime", "hit", "(I)V", false));
+            "io/killedkenny/crossfuzz/CoverageRuntime", "hit", "(I)V", false));
         return l;
     }
 }

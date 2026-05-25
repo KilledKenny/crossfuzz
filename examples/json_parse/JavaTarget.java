@@ -1,4 +1,4 @@
-import crossfuzz.Crossfuzz;
+import io.killedkenny.crossfuzz.Crossfuzz;
 
 /**
  * JSON parse target for cross-language differential fuzzing.

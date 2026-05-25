@@ -1,4 +1,4 @@
-import crossfuzz.Crossfuzz;
+import io.killedkenny.crossfuzz.Crossfuzz;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 

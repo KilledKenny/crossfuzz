@@ -1,4 +1,4 @@
-package crossfuzz;
+package io.killedkenny.crossfuzz;
 
 import java.nio.ByteBuffer;
 
