@@ -1,20 +1,40 @@
-//go:build e2e
-
-package e2e_test
+package cli
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
-	"testing"
 	"time"
 
 	"crossfuzz/e2e/framework"
 )
 
+// register all CLI flag tests. Each test focuses on one flag's wiring.
+func init() {
+	r := func(name string, tags []string, fn func(*framework.T)) {
+		framework.Register(framework.Test{
+			Name: "cli." + name,
+			Tags: append([]string{"cli"}, tags...),
+			Func: fn,
+		})
+	}
+	r("NameFilter_NoMatch", nil, testNameFilterNoMatch)
+	r("NameFilter_Match", nil, testNameFilterMatch)
+	r("MaxFindings", nil, testMaxFindings)
+	r("WarmupAnnounced", nil, testWarmupAnnounced)
+	r("DebugEdge", nil, testDebugEdge)
+	r("LogFile", nil, testLogFile)
+	r("Workers", []string{"parallel"}, testWorkers)
+	r("CustomCorpusAndFindingsDirs", nil, testCustomCorpusAndFindingsDirs)
+	r("PerExecTimeoutTriggersFinding", nil, testPerExecTimeoutTriggersFinding)
+	r("Validate", nil, testValidate)
+	r("MaxMemory_CrashesTargetOnOverflow", nil, testMaxMemory)
+	r("RootBuildFlag", nil, testRootBuildFlag)
+}
+
 // buildGoByteEcho is the shared "fast Go-only build" used by most CLI flag
 // tests. It returns a freshly built workspace ready to `run` against.
-func buildGoByteEcho(t *testing.T, extra map[string]any) *framework.Workspace {
+func buildGoByteEcho(t *framework.T, extra map[string]any) *framework.Workspace {
 	t.Helper()
 	ws := framework.NewWorkspace(t, "byte_echo")
 	vars := map[string]any{
@@ -32,8 +52,7 @@ func buildGoByteEcho(t *testing.T, extra map[string]any) *framework.Workspace {
 	return ws
 }
 
-func TestCLI_NameFilter_NoMatch(t *testing.T) {
-	t.Parallel()
+func testNameFilterNoMatch(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
@@ -47,8 +66,7 @@ func TestCLI_NameFilter_NoMatch(t *testing.T) {
 	}
 }
 
-func TestCLI_NameFilter_Match(t *testing.T) {
-	t.Parallel()
+func testNameFilterMatch(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
@@ -62,14 +80,11 @@ func TestCLI_NameFilter_Match(t *testing.T) {
 	}
 }
 
-func TestCLI_MaxFindings(t *testing.T) {
-	t.Parallel()
+func testMaxFindings(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
-	// Use the divergent fixture: every input of length 3 diverges, so
-	// findings appear quickly. Assert that --max-findings stops the run at
-	// exactly that limit (or close to it — workers may race past N by a few).
+	// divergent fixture: 3-byte inputs diverge, so findings appear quickly.
 	ws := framework.NewWorkspace(t, "divergent")
 	ws.RenderConfig(t, map[string]any{
 		"ExecTimeout":     "500ms",
@@ -85,15 +100,12 @@ func TestCLI_MaxFindings(t *testing.T) {
 	if res.Stats.Findings < 1 {
 		t.Errorf("expected >=1 finding from divergent fixture, got %d", res.Stats.Findings)
 	}
-	// Campaign should stop early (well before the 30s timeout) once findings cap is hit.
-	// Sanity-check via captured stats: corpus is small because we exited fast.
 	if res.Stats.Execs > 50000 {
 		t.Errorf("expected --max-findings to stop early; got %d execs (campaign did not exit on findings cap)", res.Stats.Execs)
 	}
 }
 
-func TestCLI_WarmupAnnounced(t *testing.T) {
-	t.Parallel()
+func testWarmupAnnounced(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
@@ -110,8 +122,7 @@ func TestCLI_WarmupAnnounced(t *testing.T) {
 	}
 }
 
-func TestCLI_DebugEdge(t *testing.T) {
-	t.Parallel()
+func testDebugEdge(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
@@ -129,8 +140,7 @@ func TestCLI_DebugEdge(t *testing.T) {
 	}
 }
 
-func TestCLI_LogFile(t *testing.T) {
-	t.Parallel()
+func testLogFile(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
@@ -150,8 +160,7 @@ func TestCLI_LogFile(t *testing.T) {
 	}
 }
 
-func TestCLI_Workers(t *testing.T) {
-	t.Parallel()
+func testWorkers(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
@@ -165,8 +174,7 @@ func TestCLI_Workers(t *testing.T) {
 	}
 }
 
-func TestCLI_CustomCorpusAndFindingsDirs(t *testing.T) {
-	t.Parallel()
+func testCustomCorpusAndFindingsDirs(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
@@ -181,17 +189,12 @@ func TestCLI_CustomCorpusAndFindingsDirs(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(ws.Dir, "custom-corpus")); err != nil {
 		t.Errorf("expected custom-corpus dir to exist: %v", err)
 	}
-	// findings dir is created lazily; we only require it exists by the time
-	// the run finished — there may be no findings for byte_echo so a missing
-	// dir is acceptable.
 }
 
-func TestCLI_PerExecTimeoutTriggersFinding(t *testing.T) {
-	t.Parallel()
+func testPerExecTimeoutTriggersFinding(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
-	// slow fixture sleeps when input starts with 'S'; seed begins with 'S'.
 	ws := framework.NewWorkspace(t, "slow")
 	ws.RenderConfig(t, map[string]any{
 		"CampaignTimeout": "10s",
@@ -209,13 +212,10 @@ func TestCLI_PerExecTimeoutTriggersFinding(t *testing.T) {
 	}
 }
 
-func TestCLI_Validate(t *testing.T) {
-	t.Parallel()
+func testValidate(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
-	// echo is deterministic, so --validate should run cleanly. This just
-	// asserts the flag is accepted and doesn't perturb correctness.
 	ws := buildGoByteEcho(t, nil)
 	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--validate", "2")
 	if res.ExitCode != 0 {
@@ -226,15 +226,11 @@ func TestCLI_Validate(t *testing.T) {
 	}
 }
 
-func TestCLI_MaxMemory_CrashesTargetOnOverflow(t *testing.T) {
-	t.Parallel()
+func testMaxMemory(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
-	framework.RequireGo(t)
-
 	framework.RequireClang19(t)
-	// The memhog fixture allocates 512 MiB when the input begins with 'M'.
-	// Under --max-memory=128M the RLIMIT_AS bound makes that allocation
-	// fail and the target aborts → crash finding.
+
+	// memhog allocates 512 MiB on 'M'; --max-memory=128M makes the malloc fail.
 	ws := framework.NewWorkspace(t, "memhog")
 	ws.RenderConfig(t, map[string]any{
 		"ExecTimeout":     "2s",
@@ -251,16 +247,14 @@ func TestCLI_MaxMemory_CrashesTargetOnOverflow(t *testing.T) {
 		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
 	}
 	if res.Stats.Crashes == 0 {
-		t.Errorf("expected >=1 crash from memhog under --max-memory=512M; got 0\nstdout:\n%s", res.Stdout)
+		t.Errorf("expected >=1 crash from memhog under --max-memory=128M; got 0\nstdout:\n%s", res.Stdout)
 	}
 }
 
-func TestCLI_RootBuildFlag(t *testing.T) {
-	t.Parallel()
+func testRootBuildFlag(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
-	// Build via `run --build` instead of an explicit build step.
 	ws := framework.NewWorkspace(t, "byte_echo")
 	ws.RenderConfig(t, map[string]any{
 		"Go":              true,

@@ -1,5 +1,3 @@
-//go:build e2e
-
 package framework
 
 import (
@@ -7,12 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"testing"
 )
 
 // CorpusFiles returns the list of corpus entry filenames under <ws.Dir>/<sub>.
 // Returns an empty slice if the directory does not exist.
-func CorpusFiles(t *testing.T, ws *Workspace, sub string) []string {
+func CorpusFiles(t *T, ws *Workspace, sub string) []string {
 	t.Helper()
 	dir := filepath.Join(ws.Dir, sub)
 	entries, err := os.ReadDir(dir)
@@ -42,7 +39,7 @@ type Finding struct {
 }
 
 // Findings returns all subdirectories of <ws.Dir>/<sub>, parsed.
-func Findings(t *testing.T, ws *Workspace, sub string) []Finding {
+func Findings(t *T, ws *Workspace, sub string) []Finding {
 	t.Helper()
 	dir := filepath.Join(ws.Dir, sub)
 	entries, err := os.ReadDir(dir)

@@ -1,5 +1,3 @@
-//go:build e2e
-
 package framework
 
 import (
@@ -9,12 +7,12 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"testing"
 	"text/template"
 )
 
 // Workspace is an isolated tmpdir for one e2e test. It holds a copy of a
-// fixture and a rendered crossfuzz.toml. Removed automatically on test cleanup.
+// fixture and a rendered crossfuzz.toml. Removed automatically on test
+// cleanup (via T.TempDir's cleanup).
 type Workspace struct {
 	Dir        string
 	ConfigPath string
@@ -22,14 +20,12 @@ type Workspace struct {
 	FixtureDir string
 }
 
-// NewWorkspace creates a tmpdir, copies the named fixture into it, and renders
-// crossfuzz.toml.tmpl into ./crossfuzz.toml with no template vars. Use
-// RenderConfig to re-render with vars.
-func NewWorkspace(t *testing.T, fixture string) *Workspace {
+// NewWorkspace creates a tmpdir, copies the named fixture into it, and
+// renders every *.tmpl file with default vars. Fixtures are resolved first
+// from e2e/fixtures/<name>, then from e2e/<name>.
+func NewWorkspace(t *T, fixture string) *Workspace {
 	t.Helper()
 	root := repoRoot(t)
-	// Resolution order: e2e/fixtures/<name> (the common case) then e2e/<path>
-	// (lets tests under e2e/comparers/<x>/ point at their colocated fixture).
 	candidates := []string{
 		filepath.Join(root, "e2e", "fixtures", fixture),
 		filepath.Join(root, "e2e", fixture),
@@ -58,10 +54,11 @@ func NewWorkspace(t *testing.T, fixture string) *Workspace {
 	return ws
 }
 
-// RenderConfig walks the workspace, rendering every *.tmpl file with the given
-// vars and writing the result to the same path with the .tmpl suffix removed.
-// {{.RepoRoot}} is always available. Re-callable from tests to vary inputs.
-func (w *Workspace) RenderConfig(t *testing.T, vars map[string]any) {
+// RenderConfig walks the workspace, rendering every *.tmpl file with the
+// given vars and writing the result to the same path with the .tmpl suffix
+// removed. {{.RepoRoot}} is always available. Re-callable from tests to
+// vary inputs.
+func (w *Workspace) RenderConfig(t *T, vars map[string]any) {
 	t.Helper()
 	if vars == nil {
 		vars = map[string]any{}
@@ -89,22 +86,19 @@ func (w *Workspace) RenderConfig(t *testing.T, vars map[string]any) {
 			return err
 		}
 		out := strings.TrimSuffix(path, ".tmpl")
-		return os.WriteFile(out, buf.Bytes(), 0644)
+		return os.WriteFile(out, buf.Bytes(), 0o644)
 	})
 	if err != nil {
 		t.Fatalf("render templates: %v", err)
 	}
 }
 
-// repoRoot returns the absolute path to the cross_fuzz repo root by walking up
-// from this source file's directory.
-func repoRoot(t *testing.T) string {
+func repoRoot(t *T) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("cannot determine caller file")
 	}
-	// .../e2e/framework/workspace.go -> .../
 	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
 }
 
@@ -117,9 +111,6 @@ func copyTree(src, dst string) error {
 		if err != nil {
 			return err
 		}
-		// Skip Go test files that may live alongside a fixture (the case for
-		// e2e/comparers/<x>/, which colocates test and fixture). Copying them
-		// into the tmpdir would cause Go to try to build/run them again.
 		if !info.IsDir() && strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
@@ -137,7 +128,7 @@ func copyFile(src, dst string, mode os.FileMode) error {
 		return err
 	}
 	defer in.Close()
-	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
 	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)

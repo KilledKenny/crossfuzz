@@ -1,23 +1,28 @@
-//go:build e2e
-
-package numeric_test
+package none
 
 import (
-	"testing"
 	"time"
 
 	"crossfuzz/e2e/framework"
 )
 
-func TestComparer_Numeric_IgnoresFormattingDifferences(t *testing.T) {
-	t.Parallel()
+func init() {
+	r := func(name string, tags []string, fn func(*framework.T)) {
+		framework.Register(framework.Test{
+			Name: "comparer.none." + name,
+			Tags: append([]string{"comparer", "none"}, tags...),
+			Func: fn,
+		})
+	}
+	r("NeverReportsFindings", nil, testNoFindings)
+	r("NeverReportsFindings_Parallel", []string{"parallel"}, testNoFindingsParallel)
+}
+
+func testNoFindings(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
-	// Both targets emit the same integer but with different whitespace and
-	// newline. byte_equal would flag every input; numeric parses both as
-	// float64 and finds them equal within default epsilon.
-	ws := framework.NewWorkspace(t, "comparers/numeric")
+	ws := framework.NewWorkspace(t, "comparers/none")
 	ws.RenderConfig(t, map[string]any{"CampaignTimeout": "8s"})
 	if r := framework.Build(t, ws); r.ExitCode != 0 {
 		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
@@ -27,16 +32,15 @@ func TestComparer_Numeric_IgnoresFormattingDifferences(t *testing.T) {
 		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
 	}
 	if res.Stats.Findings != 0 {
-		t.Errorf("numeric must accept whitespace-formatted same-value outputs; got %d findings", res.Stats.Findings)
+		t.Errorf("comparator=none must produce 0 findings even with divergent targets; got %d", res.Stats.Findings)
 	}
 }
 
-func TestComparer_Numeric_IgnoresFormattingDifferences_Parallel(t *testing.T) {
-	t.Parallel()
+func testNoFindingsParallel(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
-	ws := framework.NewWorkspace(t, "comparers/numeric")
+	ws := framework.NewWorkspace(t, "comparers/none")
 	ws.RenderConfig(t, map[string]any{"CampaignTimeout": "8s"})
 	if r := framework.Build(t, ws); r.ExitCode != 0 {
 		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
@@ -46,6 +50,6 @@ func TestComparer_Numeric_IgnoresFormattingDifferences_Parallel(t *testing.T) {
 		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
 	}
 	if res.Stats.Findings != 0 {
-		t.Errorf("numeric --workers=4 must accept whitespace-formatted same-value outputs; got %d findings", res.Stats.Findings)
+		t.Errorf("comparator=none with --workers=4 must produce 0 findings; got %d", res.Stats.Findings)
 	}
 }

@@ -1,5 +1,3 @@
-//go:build e2e
-
 package framework
 
 import (
@@ -7,7 +5,6 @@ import (
 	"context"
 	"os/exec"
 	"path/filepath"
-	"testing"
 	"time"
 )
 
@@ -21,43 +18,38 @@ type RunResult struct {
 }
 
 // Run invokes `bin/crossfuzz run <ws.ConfigPath> <args...>` in the workspace
-// directory and returns the captured result. The test fails on exec errors
-// (binary missing, etc.) but a non-zero exit code is returned, not failed —
-// callers can assert on ExitCode.
-func Run(t *testing.T, ws *Workspace, args ...string) RunResult {
+// directory. Exec-level failures (binary missing) fail the test; non-zero
+// exit codes are returned in ExitCode for the caller to assert on.
+func Run(t *T, ws *Workspace, args ...string) RunResult {
 	t.Helper()
-	return runSubcommand(t, ws, "run", args)
+	return runSubcommand(t, ws, "run", args, 5*time.Minute)
 }
 
 // Build invokes `bin/crossfuzz build <ws.ConfigPath>`.
-func Build(t *testing.T, ws *Workspace, args ...string) RunResult {
+func Build(t *T, ws *Workspace, args ...string) RunResult {
 	t.Helper()
-	return runSubcommand(t, ws, "build", args)
+	return runSubcommand(t, ws, "build", args, 5*time.Minute)
 }
 
 // Reduce invokes `bin/crossfuzz reduce ...`.
-func Reduce(t *testing.T, ws *Workspace, args ...string) RunResult {
+func Reduce(t *T, ws *Workspace, args ...string) RunResult {
 	t.Helper()
-	return runSubcommand(t, ws, "reduce", args)
+	return runSubcommand(t, ws, "reduce", args, 5*time.Minute)
 }
 
 // Analyze invokes `bin/crossfuzz analyze ...`.
-func Analyze(t *testing.T, ws *Workspace, args ...string) RunResult {
+func Analyze(t *T, ws *Workspace, args ...string) RunResult {
 	t.Helper()
-	return runSubcommand(t, ws, "analyze", args)
+	return runSubcommand(t, ws, "analyze", args, 5*time.Minute)
 }
 
 // RunWithTimeout is like Run but kills the process if it exceeds wall.
-func RunWithTimeout(t *testing.T, ws *Workspace, wall time.Duration, args ...string) RunResult {
+func RunWithTimeout(t *T, ws *Workspace, wall time.Duration, args ...string) RunResult {
 	t.Helper()
-	return runSubcommandCtx(t, ws, "run", args, wall)
+	return runSubcommand(t, ws, "run", args, wall)
 }
 
-func runSubcommand(t *testing.T, ws *Workspace, sub string, args []string) RunResult {
-	return runSubcommandCtx(t, ws, sub, args, 5*time.Minute)
-}
-
-func runSubcommandCtx(t *testing.T, ws *Workspace, sub string, args []string, wall time.Duration) RunResult {
+func runSubcommand(t *T, ws *Workspace, sub string, args []string, wall time.Duration) RunResult {
 	t.Helper()
 	bin := filepath.Join(ws.RepoRoot, "bin", "crossfuzz")
 

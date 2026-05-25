@@ -5,105 +5,189 @@ observable outputs (stdout stats, exit codes, corpus/findings directories).
 Complement the unit tests in `pkg/*` by exercising the full coordinator ↔
 harness flow across every supported language.
 
+The suite is a standalone binary `bin/crossfuzz-e2e`, not a `go test` package.
+The earlier `go test`-based version was replaced because Go's test runner
+bundles features that are at best irrelevant to an integration suite that
+shells out to a binary (caching, coverage, package boundaries) and at worst
+obscure the actual results.
+
 ## Running
 
 ```bash
-make test-e2e          # builds bin/crossfuzz + all harnesses, then runs the suite
+make test-e2e                 # builds the suite + harnesses, runs everything
+make test-e2e E2E_ARGS='-v'   # forward flags to the binary
 ```
 
-Or run a subset directly:
+Or invoke the binary directly:
 
 ```bash
-go test -tags=e2e ./e2e/harness/ -run TestGoHarness          # one language only
-go test -tags=e2e ./e2e/ -run TestCLI_                       # only CLI flag tests
-go test -tags=e2e ./e2e/ -run TestDifferential_              # only findings tests
-go test -tags=e2e -count=1 ./e2e/...                         # everything, no caching
+bin/crossfuzz-e2e                          # run everything
+bin/crossfuzz-e2e -list                    # list registered tests with their tags
+bin/crossfuzz-e2e -run '^cli\.'            # regex on test name (cli.* only)
+bin/crossfuzz-e2e -run MaxMemory           # any test whose name contains "MaxMemory"
+bin/crossfuzz-e2e -tag harness -tag go     # AND across multiple -tag flags
+bin/crossfuzz-e2e -parallel 1 -v           # serial, with per-test log lines
+bin/crossfuzz-e2e -failfast                # stop dispatching after the first failure
 ```
 
-All tests are gated behind the `e2e` build tag so the default `make test`
-stays fast and toolchain-free.
+Exit code is `0` only when every selected test passes; failures and panics
+return `1`.
 
 ## Toolchain matrix
 
 Each per-harness test skips if its toolchain or pre-built harness artifact is
 missing. Run `make harness` first to populate the artifacts.
 
-| Test | Needs |
-|------|-------|
-| `harness/go_test.go`     | `go` |
-| `harness/c_test.go`      | `clang-19` |
-| `harness/cpp_test.go`    | `clang-19`, `clang++-19` |
-| `harness/java_test.go`   | `java`, `javac`, `harness/java/build/libs/crossfuzz.jar` |
-| `harness/js_test.go`     | `bun`, `harness/js/node_modules` |
-| `harness/python_test.go` | `harness/python/.venv/bin/python3` |
-| `harness/rust_test.go`   | `cargo`, `harness/rust/target/release/libcrossfuzz_harness.rlib` |
-| `cli_test.go`            | `go` (uses byte_echo Go fixture) |
-| `coverage_test.go`       | `go` |
-| `differential_test.go`   | `go`, `clang-19` (crashy fixture) |
-| `subcommands_test.go`    | `go` |
+| Test tag | Needs |
+|----------|-------|
+| `harness:go`     | `go` |
+| `harness:c`      | `clang-19` |
+| `harness:cpp`    | `clang-19`, `clang++-19` |
+| `harness:java`   | `java`, `javac`, `harness/java/build/libs/crossfuzz.jar` |
+| `harness:js`     | `bun`, `harness/js/node_modules` |
+| `harness:python` | `harness/python/.venv/bin/python3` |
+| `harness:rust`   | `cargo`, `harness/rust/target/release/libcrossfuzz_harness.rlib` |
+| `cli`            | `go` (uses byte_echo Go fixture) |
+| `coverage`       | `go` |
+| `differential`   | `go`, `clang-19` (crashy fixture) |
+| `subcommand`     | `go` |
+| `comparer:*`     | `go`, plus `python3` for `comparer:custom` |
+| `input_filter`   | `go` |
 
-A skipped test prints `SKIP` and the reason; CI can be configured to fail on
+A skipped test prints `skip` and the reason; CI can be configured to fail on
 any skip if full coverage is required.
 
 ## Layout
 
 ```
 e2e/
-├── framework/         # shared test helpers (subprocess runner, stats parser,
-│                      # workspace+template renderer, toolchain probes)
-├── fixtures/          # minimal target programs used by tests
-│   ├── byte_echo/     # all 7 langs; returns input unchanged with byte-class
-│   │                  # branches so the fuzzer has paths to discover
-│   ├── branchy/       # Go; broad branch surface for coverage discovery
-│   ├── divergent/     # two Go targets, one with an intentional bug
-│   ├── slow/          # Go; sleeps on trigger byte → timeout finding
-│   └── crashy/        # C; abort() on trigger byte → crash finding
-├── harness/           # per-language harness tests (see harness/README.md
-│                      # for the four-category test contract)
-├── cli_test.go        # CLI flag tests (--timeout, --workers, --warmup, …)
-├── coverage_test.go   # coverage discovery + warmup behavior
-├── differential_test.go # divergence/crash/timeout finding artifacts
-└── subcommands_test.go  # build, reduce, analyze
+├── main.go              # CLI entry point
+├── framework/           # the test runtime + helpers
+│   ├── ctx.go           # framework.T (mimics *testing.T's surface)
+│   ├── registry.go      # global test registry
+│   ├── orchestrator.go  # parallel test runner with summary
+│   ├── workspace.go     # tmpdir + .tmpl renderer
+│   ├── runner.go        # subprocess wrappers (Run/Build/Reduce/Analyze)
+│   ├── stats.go         # parses crossfuzz ticker + final summary
+│   ├── artifacts.go     # walks corpus/ and findings/
+│   └── toolchain.go     # Require* helpers (skip when toolchain missing)
+│
+├── tests/               # test bodies; each subpackage's init() registers
+│   ├── all.go           # side-effect imports of every subpackage
+│   ├── cli/             # CLI flag tests
+│   ├── coverage/        # discovery + warmup
+│   ├── differential/    # finding artifact structure
+│   ├── restart/         # corpus reload on second run
+│   ├── subcommands/     # build, reduce, analyze
+│   ├── input_filter/    # baseline + reject + transform (+ parallel)
+│   ├── harness/         # per-language harness tests (see ./harness/README.md)
+│   └── comparers/       # per-comparator-type tests
+│
+└── fixtures/            # minimal target programs used by tests
+    ├── byte_echo/       # all 7 langs
+    ├── branchy/         # broad branch surface
+    ├── divergent/       # two Go targets, one buggy
+    ├── slow/            # timeout fixture
+    ├── crashy/          # crash fixture
+    └── memhog/          # max-memory fixture
 ```
+
+Fixtures live next to the comparer/input_filter test subdirectories too (under
+`e2e/comparers/<x>/` and `e2e/input_filter/`); `framework.NewWorkspace` looks
+in both `e2e/fixtures/<name>` and `e2e/<name>` so colocated fixtures work.
+
+## Tags
+
+Every registered test carries tags. Use them to slice runs:
+
+```bash
+bin/crossfuzz-e2e -tag comparer            # all comparator tests
+bin/crossfuzz-e2e -tag parallel            # every multi-worker variant
+bin/crossfuzz-e2e -tag harness -tag rust   # rust harness only
+bin/crossfuzz-e2e -tag warmup              # post-warmup stability tests
+```
+
+`-tag` is repeatable and combines with AND. Use `-run` (regex on name) for
+finer slicing.
+
+## How a test is written
+
+Tests register themselves via `init()`; the binary imports every test
+subpackage for side effects.
+
+```go
+package mycategory
+
+import (
+    "time"
+    "crossfuzz/e2e/framework"
+)
+
+func init() {
+    framework.Register(framework.Test{
+        Name: "mycategory.MyCheck",
+        Tags: []string{"mycategory"},
+        Func: testMyCheck,
+    })
+}
+
+func testMyCheck(t *framework.T) {
+    framework.RequireCrossfuzzBinary(t)
+    framework.RequireGo(t)
+
+    ws := framework.NewWorkspace(t, "byte_echo")
+    ws.RenderConfig(t, map[string]any{"Go": true, "CampaignTimeout": "5s"})
+    if r := framework.Build(t, ws); r.ExitCode != 0 {
+        t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
+    }
+    res := framework.RunWithTimeout(t, ws, 30*time.Second)
+    if res.Stats.Findings != 0 {
+        t.Errorf("expected 0 findings, got %d", res.Stats.Findings)
+    }
+}
+```
+
+`framework.T` exposes `Errorf` / `Fatalf` / `Skipf` / `Logf` / `Cleanup` /
+`TempDir` / `Helper` with the same semantics as `*testing.T`. `Fatalf` aborts
+the current test via panic and is recovered by the orchestrator; other tests
+keep running unless `-failfast` is set. Tests must not call `t.Parallel()` —
+parallelism is controlled centrally by `-parallel N`.
 
 ## Fixtures and the template system
 
-A "fixture" is a directory under `fixtures/` containing a target program and
-a `crossfuzz.toml.tmpl`. When a test calls `framework.NewWorkspace(t, name)`,
-the framework:
+A "fixture" is a directory containing a target program and a
+`crossfuzz.toml.tmpl`. `framework.NewWorkspace(t, name)`:
 
-1. Copies the fixture into a `t.TempDir()` so tests are isolated.
-2. Renders every `*.tmpl` file in the copy with the test's variables (writing
-   the result to the path with `.tmpl` stripped).
+1. Copies the fixture into a tmpdir owned by the test.
+2. Renders every `*.tmpl` file in the copy, writing the result to the same
+   path with `.tmpl` stripped.
 
 `{{.RepoRoot}}` is always available, so templates can reference repo-relative
-paths like `{{.RepoRoot}}/harness/c` without hardcoding. Tests can also pass
-their own vars — `CampaignTimeout`, `ExecTimeout`, `MaxInputSize`, language
-flags like `Go` / `C` / `Java` — to customize the rendered TOML per test
-case.
+paths like `{{.RepoRoot}}/harness/c`. Tests pass their own vars
+(`CampaignTimeout`, `ExecTimeout`, language flags like `Go` / `C` / `Java`)
+via the second argument to `RenderConfig`.
 
 Common template files:
 
 - `crossfuzz.toml.tmpl` — the campaign config.
-- `go.mod.tmpl` — required for Go targets, supplies `replace crossfuzz => {{.RepoRoot}}` so the fixture can import the local harness from the tmpdir.
+- `go.mod.tmpl` — for Go targets, supplies `replace crossfuzz => {{.RepoRoot}}`.
 - `Cargo.toml.tmpl` — same idea for Rust.
-- `echo.py.tmpl`, `echo.js.tmpl` — used when the script itself needs a path to the harness directory.
+- `echo.py.tmpl`, `echo.js.tmpl` — when the script itself needs the harness path.
 
 ## Adding a new fixture
 
-1. Create `fixtures/<name>/` with at least:
-   - `crossfuzz.toml.tmpl`
-   - one target subdirectory (`go/`, `c/`, etc.)
-   - `seeds/` with at least one seed file
+1. Create `fixtures/<name>/` with at least `crossfuzz.toml.tmpl`, one target
+   subdirectory, and a `seeds/` directory.
 2. If the target language is Go or Rust, include the corresponding
-   `go.mod.tmpl` / `Cargo.toml.tmpl` with a `replace` pointing at `{{.RepoRoot}}`.
-3. Write a test in `e2e/*_test.go` that calls `framework.NewWorkspace(t, "<name>")`,
-   renders the config, builds, and runs.
+   `go.mod.tmpl` / `Cargo.toml.tmpl` with `replace ... => {{.RepoRoot}}`.
+3. Write a test under `e2e/tests/<category>/` that calls
+   `framework.NewWorkspace(t, "<name>")`, renders, builds, and runs.
 
 ## Adding a new harness language
 
-See `harness/README.md` — adding a new language is a copy-paste of the four-
-category test contract plus a target source file under `fixtures/byte_echo/<lang>/`.
+See `tests/harness/README.md` — adding a new language is a copy-paste of the
+four-category test contract plus a target source file under
+`fixtures/byte_echo/<lang>/`.
 
 ## Determinism
 
@@ -112,5 +196,5 @@ ranges and invariants (`corpus > seeds`, `findings >= 1`, `coverage diff <= 2`)
 rather than exact counts. A future `--seed` flag in the coordinator would let
 us tighten these.
 
-Tests use short `CampaignTimeout` values (5–20s) so the suite runs in under
-a minute on a full-toolchain machine.
+Tests use short `CampaignTimeout` values (5–20s) so the suite runs in well
+under two minutes on a full-toolchain machine.

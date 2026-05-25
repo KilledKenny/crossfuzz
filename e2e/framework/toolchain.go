@@ -1,12 +1,9 @@
-//go:build e2e
-
 package framework
 
 import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"testing"
 )
 
 // Each Require* helper t.Skip()s the calling test if the required toolchain
@@ -14,22 +11,22 @@ import (
 // run the subset of e2e tests their environment supports.
 
 // RequireBinary skips the test if `name` is not found on PATH.
-func RequireBinary(t *testing.T, name string) {
+func RequireBinary(t *T, name string) {
 	t.Helper()
 	if _, err := exec.LookPath(name); err != nil {
 		t.Skipf("required binary %q not on PATH: %v", name, err)
 	}
 }
 
-func RequireClang19(t *testing.T) { t.Helper(); RequireBinary(t, "clang-19") }
-func RequireGradle(t *testing.T)  { t.Helper(); RequireBinary(t, "gradle") }
-func RequireBun(t *testing.T)     { t.Helper(); RequireBinary(t, "bun") }
-func RequireCargo(t *testing.T)   { t.Helper(); RequireBinary(t, "cargo") }
-func RequireGo(t *testing.T)      { t.Helper(); RequireBinary(t, "go") }
-func RequireJava(t *testing.T)    { t.Helper(); RequireBinary(t, "java") }
+func RequireClang19(t *T) { t.Helper(); RequireBinary(t, "clang-19") }
+func RequireGradle(t *T)  { t.Helper(); RequireBinary(t, "gradle") }
+func RequireBun(t *T)     { t.Helper(); RequireBinary(t, "bun") }
+func RequireCargo(t *T)   { t.Helper(); RequireBinary(t, "cargo") }
+func RequireGo(t *T)      { t.Helper(); RequireBinary(t, "go") }
+func RequireJava(t *T)    { t.Helper(); RequireBinary(t, "java") }
 
 // RequirePythonVenv skips if harness/python/.venv/bin/python3 is missing.
-func RequirePythonVenv(t *testing.T) {
+func RequirePythonVenv(t *T) {
 	t.Helper()
 	root := repoRoot(t)
 	p := filepath.Join(root, "harness", "python", ".venv", "bin", "python3")
@@ -39,7 +36,7 @@ func RequirePythonVenv(t *testing.T) {
 }
 
 // RequireCrossfuzzBinary skips if bin/crossfuzz does not exist.
-func RequireCrossfuzzBinary(t *testing.T) {
+func RequireCrossfuzzBinary(t *T) {
 	t.Helper()
 	root := repoRoot(t)
 	p := filepath.Join(root, "bin", "crossfuzz")
@@ -49,7 +46,7 @@ func RequireCrossfuzzBinary(t *testing.T) {
 }
 
 // RequireJavaHarness skips if harness/java/build/libs/crossfuzz.jar is missing.
-func RequireJavaHarness(t *testing.T) {
+func RequireJavaHarness(t *T) {
 	t.Helper()
 	root := repoRoot(t)
 	p := filepath.Join(root, "harness", "java", "build", "libs", "crossfuzz.jar")
@@ -59,7 +56,7 @@ func RequireJavaHarness(t *testing.T) {
 }
 
 // RequireRustHarness skips if the rust harness rlib is missing.
-func RequireRustHarness(t *testing.T) {
+func RequireRustHarness(t *T) {
 	t.Helper()
 	root := repoRoot(t)
 	p := filepath.Join(root, "harness", "rust", "target", "release", "libcrossfuzz_harness.rlib")
@@ -69,7 +66,7 @@ func RequireRustHarness(t *testing.T) {
 }
 
 // RequireJSHarness skips if the JS harness's node_modules is missing.
-func RequireJSHarness(t *testing.T) {
+func RequireJSHarness(t *T) {
 	t.Helper()
 	root := repoRoot(t)
 	p := filepath.Join(root, "harness", "js", "node_modules")

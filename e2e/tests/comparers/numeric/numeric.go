@@ -1,22 +1,28 @@
-//go:build e2e
-
-package numeric_relative_test
+package numeric
 
 import (
-	"testing"
 	"time"
 
 	"crossfuzz/e2e/framework"
 )
 
-func TestComparer_NumericRelative_AcceptsSmallRelativeDiffs(t *testing.T) {
-	t.Parallel()
+func init() {
+	r := func(name string, tags []string, fn func(*framework.T)) {
+		framework.Register(framework.Test{
+			Name: "comparer.numeric." + name,
+			Tags: append([]string{"comparer", "numeric"}, tags...),
+			Func: fn,
+		})
+	}
+	r("IgnoresFormattingDifferences", nil, testIgnoresFormatting)
+	r("IgnoresFormattingDifferences_Parallel", []string{"parallel"}, testIgnoresFormattingParallel)
+}
+
+func testIgnoresFormatting(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
-	// exact/ and noisy/ differ by a relative factor of 1e-12. The default
-	// numeric_relative epsilon is 1e-9 so both must be accepted as equal.
-	ws := framework.NewWorkspace(t, "comparers/numeric_relative")
+	ws := framework.NewWorkspace(t, "comparers/numeric")
 	ws.RenderConfig(t, map[string]any{"CampaignTimeout": "8s"})
 	if r := framework.Build(t, ws); r.ExitCode != 0 {
 		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
@@ -26,16 +32,15 @@ func TestComparer_NumericRelative_AcceptsSmallRelativeDiffs(t *testing.T) {
 		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
 	}
 	if res.Stats.Findings != 0 {
-		t.Errorf("numeric_relative must accept rel-diff 1e-12; got %d findings", res.Stats.Findings)
+		t.Errorf("numeric must accept whitespace-formatted same-value outputs; got %d findings", res.Stats.Findings)
 	}
 }
 
-func TestComparer_NumericRelative_AcceptsSmallRelativeDiffs_Parallel(t *testing.T) {
-	t.Parallel()
+func testIgnoresFormattingParallel(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
-	ws := framework.NewWorkspace(t, "comparers/numeric_relative")
+	ws := framework.NewWorkspace(t, "comparers/numeric")
 	ws.RenderConfig(t, map[string]any{"CampaignTimeout": "8s"})
 	if r := framework.Build(t, ws); r.ExitCode != 0 {
 		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
@@ -45,6 +50,6 @@ func TestComparer_NumericRelative_AcceptsSmallRelativeDiffs_Parallel(t *testing.
 		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
 	}
 	if res.Stats.Findings != 0 {
-		t.Errorf("numeric_relative --workers=4 must accept rel-diff 1e-12; got %d findings", res.Stats.Findings)
+		t.Errorf("numeric --workers=4 must accept whitespace-formatted same-value outputs; got %d findings", res.Stats.Findings)
 	}
 }

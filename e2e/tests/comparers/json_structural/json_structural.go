@@ -1,22 +1,27 @@
-//go:build e2e
-
-package json_structural_test
+package json_structural
 
 import (
-	"testing"
 	"time"
 
 	"crossfuzz/e2e/framework"
 )
 
-func TestComparer_JSONStructural_IgnoresKeyOrderAndWhitespace(t *testing.T) {
-	t.Parallel()
+func init() {
+	r := func(name string, tags []string, fn func(*framework.T)) {
+		framework.Register(framework.Test{
+			Name: "comparer.json_structural." + name,
+			Tags: append([]string{"comparer", "json_structural"}, tags...),
+			Func: fn,
+		})
+	}
+	r("IgnoresKeyOrderAndWhitespace", nil, testIgnores)
+	r("IgnoresKeyOrderAndWhitespace_Parallel", []string{"parallel"}, testIgnoresParallel)
+}
+
+func testIgnores(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
-	// compact/ and reordered/ emit the same JSON object but with different
-	// key order and whitespace. json_structural must report no findings;
-	// byte_equal would report on every single input.
 	ws := framework.NewWorkspace(t, "comparers/json_structural")
 	ws.RenderConfig(t, map[string]any{"CampaignTimeout": "8s"})
 	if r := framework.Build(t, ws); r.ExitCode != 0 {
@@ -31,8 +36,7 @@ func TestComparer_JSONStructural_IgnoresKeyOrderAndWhitespace(t *testing.T) {
 	}
 }
 
-func TestComparer_JSONStructural_IgnoresKeyOrderAndWhitespace_Parallel(t *testing.T) {
-	t.Parallel()
+func testIgnoresParallel(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 

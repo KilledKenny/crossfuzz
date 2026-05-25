@@ -1,20 +1,31 @@
-//go:build e2e
-
-package input_filter_test
+package input_filter
 
 import (
 	"strings"
-	"testing"
 	"time"
 
 	"crossfuzz/e2e/framework"
 )
 
-// TestInputFilter_NoFilter_Baseline establishes that without any filter the
-// divergent targets produce findings. This is the control case — if it does
-// not produce findings, the subsequent filter tests prove nothing.
-func TestInputFilter_NoFilter_Baseline(t *testing.T) {
-	t.Parallel()
+func init() {
+	r := func(name string, tags []string, fn func(*framework.T)) {
+		framework.Register(framework.Test{
+			Name: "input_filter." + name,
+			Tags: append([]string{"input_filter"}, tags...),
+			Func: fn,
+		})
+	}
+	r("NoFilter_Baseline", nil, testNoFilterBaseline)
+	r("Reject_All", nil, testRejectAll)
+	r("Transform_RewritesInput", nil, testTransform)
+	r("NoFilter_Baseline_Parallel", []string{"parallel"}, testNoFilterBaselineParallel)
+	r("Reject_All_Parallel", []string{"parallel"}, testRejectAllParallel)
+	r("Transform_RewritesInput_Parallel", []string{"parallel"}, testTransformParallel)
+}
+
+// testNoFilterBaseline establishes that without any filter the divergent
+// targets produce findings. If this fails, the other filter tests prove nothing.
+func testNoFilterBaseline(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
@@ -35,11 +46,7 @@ func TestInputFilter_NoFilter_Baseline(t *testing.T) {
 	}
 }
 
-// TestInputFilter_Reject_All asserts that a filter rejecting every input
-// produces no findings and a non-zero rejected count, proving the filter is
-// actually invoked.
-func TestInputFilter_Reject_All(t *testing.T) {
-	t.Parallel()
+func testRejectAll(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
@@ -68,13 +75,7 @@ func TestInputFilter_Reject_All(t *testing.T) {
 	}
 }
 
-// TestInputFilter_Transform_RewritesInput uses transform mode: the filter
-// rewrites every input to "ZZZZZZZZ". target_identity then returns
-// "ZZZZZZZZ", agreeing with target_const → no findings. Without the
-// transform the targets would diverge on every input (proved by the
-// baseline test above).
-func TestInputFilter_Transform_RewritesInput(t *testing.T) {
-	t.Parallel()
+func testTransform(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
@@ -100,13 +101,7 @@ func TestInputFilter_Transform_RewritesInput(t *testing.T) {
 	}
 }
 
-// ---- Parallel variants ------------------------------------------------------
-// Each worker gets its own filter process (see buildFilter in cmd/crossfuzz/
-// main.go); a single shared filter would serialise all workers through one
-// process. These cases re-run each scenario with --workers=4.
-
-func TestInputFilter_NoFilter_Baseline_Parallel(t *testing.T) {
-	t.Parallel()
+func testNoFilterBaselineParallel(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
@@ -127,8 +122,7 @@ func TestInputFilter_NoFilter_Baseline_Parallel(t *testing.T) {
 	}
 }
 
-func TestInputFilter_Reject_All_Parallel(t *testing.T) {
-	t.Parallel()
+func testRejectAllParallel(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
@@ -146,7 +140,6 @@ func TestInputFilter_Reject_All_Parallel(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
 	}
-	// One "Started input filter." line per worker.
 	if got := strings.Count(res.Stdout, "Started input filter."); got != 4 {
 		t.Errorf("expected 4 'Started input filter.' lines (one per worker), got %d", got)
 	}
@@ -158,8 +151,7 @@ func TestInputFilter_Reject_All_Parallel(t *testing.T) {
 	}
 }
 
-func TestInputFilter_Transform_RewritesInput_Parallel(t *testing.T) {
-	t.Parallel()
+func testTransformParallel(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 

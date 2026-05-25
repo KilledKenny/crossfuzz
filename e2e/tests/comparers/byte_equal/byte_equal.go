@@ -1,16 +1,25 @@
-//go:build e2e
-
-package byte_equal_test
+package byte_equal
 
 import (
-	"testing"
 	"time"
 
 	"crossfuzz/e2e/framework"
 )
 
-func TestComparer_ByteEqual_AgreementProducesNoFindings(t *testing.T) {
-	t.Parallel()
+func init() {
+	r := func(name string, tags []string, fn func(*framework.T)) {
+		framework.Register(framework.Test{
+			Name: "comparer.byte_equal." + name,
+			Tags: append([]string{"comparer", "byte_equal"}, tags...),
+			Func: fn,
+		})
+	}
+	r("AgreementProducesNoFindings", nil, testAgree)
+	r("DivergenceProducesFindings", nil, testDiverge)
+	r("DivergenceProducesFindings_Parallel", []string{"parallel"}, testDivergeParallel)
+}
+
+func testAgree(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
@@ -31,8 +40,7 @@ func TestComparer_ByteEqual_AgreementProducesNoFindings(t *testing.T) {
 	}
 }
 
-func TestComparer_ByteEqual_DivergenceProducesFindings(t *testing.T) {
-	t.Parallel()
+func testDiverge(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
@@ -53,10 +61,7 @@ func TestComparer_ByteEqual_DivergenceProducesFindings(t *testing.T) {
 	}
 }
 
-// Parallel variant: each worker has its own pair of target processes; the
-// comparator is per-worker. Findings must still be detected.
-func TestComparer_ByteEqual_DivergenceProducesFindings_Parallel(t *testing.T) {
-	t.Parallel()
+func testDivergeParallel(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 

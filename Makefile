@@ -36,9 +36,13 @@ harness/js/node_modules: harness/js/package.json harness/js/bun.lock
 test:
 	go test -race ./...
 
+E2E_INPUTS=$(shell find e2e -name '*.go' 2>/dev/null)
+bin/crossfuzz-e2e: bin/ $(E2E_INPUTS)
+	go build -o $@ ./e2e
+
 .PHONY: test-e2e
-test-e2e: $(ALL_TARGET)
-	go test -v -tags=e2e -count=1 ./e2e/...
+test-e2e: $(ALL_TARGET) bin/crossfuzz-e2e
+	./bin/crossfuzz-e2e $(E2E_ARGS)
 
 
 ALL_TARGET+= $(HARNESS_TARGET)

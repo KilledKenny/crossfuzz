@@ -1,13 +1,15 @@
 # Per-harness e2e tests
 
-This directory contains one `*_test.go` per language harness. Each file
-exercises a single language end-to-end, using the `byte_echo` fixture, and
-asserts the same four properties so adding a new harness is a copy-paste-and-
-implement task with a clear contract.
+This directory contains one `<lang>.go` per language harness. Each file
+declares a `langCase` and calls `register(...)` from its `init()` so the
+e2e runner picks up the same four tests for every language: build, path
+discovery, output agreement, and post-warmup coverage stability. Adding a
+new harness is a copy-paste-and-implement task with a clear contract.
 
-Every harness test is gated on a toolchain probe (`framework.Require*`) at the
-top of the function. When the toolchain is missing the test calls `t.Skip()`
-rather than failing — developers can run the subset their machine supports.
+Each registered test starts by calling its `langCase.RequireToolchain(t)`.
+When the toolchain (or the harness build artifact under `harness/<lang>/`)
+is missing the test calls `t.Skipf(...)` rather than failing — developers
+can run the subset their machine supports.
 
 ## Test categories applied to every harness
 
@@ -61,13 +63,16 @@ hundreds of edges, not 1–2.
 
 ## Adding a new harness
 
-1. Copy an existing `*_test.go` here and rename to `<lang>_test.go`.
-2. Add a `Require<Lang>...` helper in `e2e/framework/toolchain.go` if a new
-   toolchain probe is needed.
-3. Add a `{{if .<Lang>}} [[target]] ... {{end}}` block to
+1. Copy an existing `<lang>.go` here (`go.go` is the simplest) and rename to
+   `<newlang>.go`.
+2. Update the `langCase` literal with the new `Tag`, template `Flag`, target
+   name, expected build artifact path, and toolchain probe.
+3. Add a `Require<NewLang>...` helper in `e2e/framework/toolchain.go` if a new
+   probe is needed.
+4. Add a `{{if .<Flag>}} [[target]] ... {{end}}` block to
    `e2e/fixtures/byte_echo/crossfuzz.toml.tmpl`.
-4. Add `<lang>/` directory under `e2e/fixtures/byte_echo/` with the target
-   source code, implementing the same echo-with-byte-category-branches shape
-   as the other languages so the path-discovery assertion has something to
-   discover.
-5. Run `make test-e2e` — only the new test should change behavior.
+5. Add `<lang>/` directory under `e2e/fixtures/byte_echo/` with the target
+   source, implementing the same echo-with-byte-category-branches shape as the
+   other languages so the path-discovery assertion has something to discover.
+6. Run `bin/crossfuzz-e2e -tag harness -tag <newlang>` — only the new
+   language's three tests should change behaviour.

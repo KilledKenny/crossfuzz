@@ -1,24 +1,22 @@
-//go:build e2e
-
-package harness_test
+package harness
 
 import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"testing"
 	"time"
 
 	"crossfuzz/e2e/framework"
 )
-
-func itoa(n int) string { return strconv.Itoa(n) }
 
 // langCase encapsulates everything that varies between per-harness tests.
 // All four assertions (build artifact, path discovery, agreement, post-warmup
 // stability) are the same shape; only the template flag, target name, and
 // expected build artifact change.
 type langCase struct {
+	// Tag is the lowercase language identifier used both as a test tag and
+	// as part of the registered test name (e.g. "go", "c", "java").
+	Tag string
 	// Flag is the {{if .X}} key in crossfuzz.toml.tmpl (e.g. "Go", "C", "JS").
 	Flag string
 	// TargetName matches the [[target]] name in the rendered TOML.
@@ -28,10 +26,38 @@ type langCase struct {
 	ArtifactPath string
 	// RequireToolchain is invoked at the start of each test to t.Skip() when
 	// the language toolchain or harness build product is missing.
-	RequireToolchain func(t *testing.T)
+	RequireToolchain func(t *framework.T)
 }
 
-func (lc langCase) render(t *testing.T, ws *framework.Workspace, extra map[string]any) {
+// register adds the four standard harness tests for lc to the global registry.
+func register(lc langCase) {
+	framework.Register(framework.Test{
+		Name: "harness." + lc.Tag + ".Build",
+		Tags: []string{"harness", lc.Tag},
+		Func: func(t *framework.T) { runBuild(t, lc) },
+	})
+	framework.Register(framework.Test{
+		Name: "harness." + lc.Tag + ".PathDiscoveryAndAgreement",
+		Tags: []string{"harness", lc.Tag},
+		Func: func(t *framework.T) { runPathDiscoveryAndAgreement(t, lc, 1) },
+	})
+	framework.Register(framework.Test{
+		Name: "harness." + lc.Tag + ".CoverageStabilityAfterWarmup",
+		Tags: []string{"harness", lc.Tag, "warmup"},
+		Func: func(t *framework.T) { runCoverageStability(t, lc) },
+	})
+}
+
+// registerParallel adds the parallel variant of path-discovery for lc.
+func registerParallel(lc langCase) {
+	framework.Register(framework.Test{
+		Name: "harness." + lc.Tag + ".PathDiscoveryAndAgreement_Parallel",
+		Tags: []string{"harness", lc.Tag, "parallel"},
+		Func: func(t *framework.T) { runPathDiscoveryAndAgreement(t, lc, 4) },
+	})
+}
+
+func (lc langCase) renderWith(t *framework.T, ws *framework.Workspace, extra map[string]any) {
 	t.Helper()
 	vars := map[string]any{lc.Flag: true}
 	for k, v := range extra {
@@ -40,13 +66,12 @@ func (lc langCase) render(t *testing.T, ws *framework.Workspace, extra map[strin
 	ws.RenderConfig(t, vars)
 }
 
-func runBuildTest(t *testing.T, lc langCase) {
-	t.Parallel()
+func runBuild(t *framework.T, lc langCase) {
 	framework.RequireCrossfuzzBinary(t)
 	lc.RequireToolchain(t)
 
 	ws := framework.NewWorkspace(t, "byte_echo")
-	lc.render(t, ws, nil)
+	lc.renderWith(t, ws, nil)
 
 	res := framework.Build(t, ws)
 	if res.ExitCode != 0 {
@@ -57,26 +82,18 @@ func runBuildTest(t *testing.T, lc langCase) {
 	}
 }
 
-func runPathDiscoveryAndAgreementTest(t *testing.T, lc langCase) {
-	runPathDiscoveryAndAgreementTestN(t, lc, 1)
-}
-
-// runPathDiscoveryAndAgreementTestN is the parameterised version: pass workers
-// > 1 to also exercise the parallel-worker code path.
-func runPathDiscoveryAndAgreementTestN(t *testing.T, lc langCase, workers int) {
-	t.Parallel()
+func runPathDiscoveryAndAgreement(t *framework.T, lc langCase, workers int) {
 	framework.RequireCrossfuzzBinary(t)
 	lc.RequireToolchain(t)
 
 	ws := framework.NewWorkspace(t, "byte_echo")
-	lc.render(t, ws, map[string]any{
+	lc.renderWith(t, ws, map[string]any{
 		"ExecTimeout":     "1s",
 		"CampaignTimeout": "8s",
 	})
 	if r := framework.Build(t, ws); r.ExitCode != 0 {
 		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
 	}
-
 	seedCount := len(framework.CorpusFiles(t, ws, "seeds"))
 	if seedCount == 0 {
 		t.Fatal("fixture must ship with at least one seed")
@@ -84,7 +101,7 @@ func runPathDiscoveryAndAgreementTestN(t *testing.T, lc langCase, workers int) {
 
 	args := []string{"--timeout", "5s", "--max-findings", "9999"}
 	if workers > 1 {
-		args = append(args, "--workers", itoa(workers))
+		args = append(args, "--workers", strconv.Itoa(workers))
 	}
 	res := framework.RunWithTimeout(t, ws, 60*time.Second, args...)
 	if res.ExitCode != 0 {
@@ -113,14 +130,13 @@ func runPathDiscoveryAndAgreementTestN(t *testing.T, lc langCase, workers int) {
 	}
 }
 
-func runCoverageStabilityTest(t *testing.T, lc langCase) {
-	t.Parallel()
+func runCoverageStability(t *framework.T, lc langCase) {
 	framework.RequireCrossfuzzBinary(t)
 	lc.RequireToolchain(t)
 
 	runOnce := func() int {
 		ws := framework.NewWorkspace(t, "byte_echo")
-		lc.render(t, ws, map[string]any{
+		lc.renderWith(t, ws, map[string]any{
 			"ExecTimeout":     "1s",
 			"CampaignTimeout": "8s",
 		})
@@ -143,11 +159,6 @@ func runCoverageStabilityTest(t *testing.T, lc langCase) {
 
 	cov1 := runOnce()
 	cov2 := runOnce()
-	// Warmup masks bitmap slots that flipped during warmup execs, but cannot
-	// catch every rare noise source (a stray GC slot in the harness's own
-	// instrumented stdlib, for example). A small tolerance avoids flake while
-	// still catching a broken or disabled warmup, which would diverge by tens
-	// to hundreds of edges, not 1–2.
 	const tolerance = 2
 	if diff := abs(cov1 - cov2); diff > tolerance {
 		t.Errorf("post-warmup coverage flaked across runs: %d vs %d (diff %d > tolerance %d) — warmup may be broken", cov1, cov2, diff, tolerance)

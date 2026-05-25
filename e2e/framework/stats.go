@@ -1,5 +1,3 @@
-//go:build e2e
-
 package framework
 
 import (
@@ -10,16 +8,16 @@ import (
 
 // TickStats is one line of the live stats ticker (printed every ~3s).
 type TickStats struct {
-	Execs        int
-	ExecsPerSec  float64
-	Rejected     int
-	Duplicates   int
-	Corpus       int
-	Coverage     int // total coverage edges across all targets
-	Findings     int
-	Crashes      int
-	Timeouts     int
-	TargetEdges  map[string]int // populated only when --debug-edge is set
+	Execs       int
+	ExecsPerSec float64
+	Rejected    int
+	Duplicates  int
+	Corpus      int
+	Coverage    int // total coverage edges across all targets
+	Findings    int
+	Crashes     int
+	Timeouts    int
+	TargetEdges map[string]int // populated only when --debug-edge is set
 }
 
 // FinalStats is parsed from the "Campaign finished. ..." line printed at
@@ -35,14 +33,12 @@ type FinalStats struct {
 }
 
 var (
-	// Stats ticker lines start with "\r\033[2K[hh:mm:ss] execs: N (X/sec) | ..."
 	tickRE = regexp.MustCompile(
 		`execs:\s+(\d+)\s+\(([0-9.]+)/sec\)\s+\|\s+rejected:\s+(\d+)\s+\|\s+dup:\s+(\d+)\s+\|\s+corpus:\s+(\d+)\s+\|\s+coverage:\s+(\d+)\s+edges\s+\|\s+findings:\s+(\d+)\s+\|\s+crashes:\s+(\d+)\s+\|\s+timeouts:\s+(\d+)`,
 	)
 	finalRE = regexp.MustCompile(
 		`Campaign finished\. Total execs:\s+(\d+),\s+Rejected:\s+(\d+),\s+Corpus:\s+(\d+),\s+Findings:\s+(\d+),\s+Crashes:\s+(\d+),\s+Timeouts:\s+(\d+)`,
 	)
-	// After the main tick fields, --debug-edge appends " | name1: N name2: N ..."
 	debugEdgeRE = regexp.MustCompile(`\s+([A-Za-z0-9_]+):\s+(\d+)`)
 )
 
@@ -66,8 +62,6 @@ func ParseOutput(stdout string) (FinalStats, []TickStats) {
 			Crashes:     atoi(m[8]),
 			Timeouts:    atoi(m[9]),
 		}
-		// Look for --debug-edge suffix after the main fields. It begins after
-		// the timeouts count with " | <name>: <n> <name>: <n> ...".
 		tail := line[strings.Index(line, "timeouts:"):]
 		if pipe := strings.Index(tail, " | "); pipe >= 0 {
 			t.TargetEdges = map[string]int{}
@@ -91,5 +85,5 @@ func ParseOutput(stdout string) (FinalStats, []TickStats) {
 	return final, ticks
 }
 
-func atoi(s string) int    { n, _ := strconv.Atoi(s); return n }
+func atoi(s string) int     { n, _ := strconv.Atoi(s); return n }
 func atof(s string) float64 { f, _ := strconv.ParseFloat(s, 64); return f }

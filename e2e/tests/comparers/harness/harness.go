@@ -1,24 +1,28 @@
-//go:build e2e
-
-package harness_compare_test
+package harness
 
 import (
 	"strings"
-	"testing"
 	"time"
 
 	"crossfuzz/e2e/framework"
 )
 
-func TestComparer_Harness_LengthOnly(t *testing.T) {
-	t.Parallel()
+func init() {
+	r := func(name string, tags []string, fn func(*framework.T)) {
+		framework.Register(framework.Test{
+			Name: "comparer.harness." + name,
+			Tags: append([]string{"comparer", "harness"}, tags...),
+			Func: fn,
+		})
+	}
+	r("LengthOnly", nil, testLengthOnly)
+	r("LengthOnly_Parallel", []string{"parallel"}, testLengthOnlyParallel)
+}
+
+func testLengthOnly(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
-	// raw/ returns input, shuffled/ returns reversed input — same length,
-	// totally different bytes. The harness comparator binary only checks
-	// length equality, so no findings are expected. byte_equal would flag
-	// every non-palindrome.
 	ws := framework.NewWorkspace(t, "comparers/harness")
 	ws.RenderConfig(t, map[string]any{"CampaignTimeout": "8s"})
 	if r := framework.Build(t, ws); r.ExitCode != 0 {
@@ -36,11 +40,7 @@ func TestComparer_Harness_LengthOnly(t *testing.T) {
 	}
 }
 
-// Parallel variant — each worker must spawn its own comparator harness
-// process bound to that worker's targets' SHM regions; a single shared
-// comparator would race on cross-worker target outputs.
-func TestComparer_Harness_LengthOnly_Parallel(t *testing.T) {
-	t.Parallel()
+func testLengthOnlyParallel(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
@@ -53,7 +53,6 @@ func TestComparer_Harness_LengthOnly_Parallel(t *testing.T) {
 	if res.ExitCode != 0 {
 		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
 	}
-	// One "Started comparator harness." line per worker.
 	if got := strings.Count(res.Stdout, "Started comparator harness."); got != 4 {
 		t.Errorf("expected 4 'Started comparator harness.' lines (one per worker), got %d", got)
 	}

@@ -1,18 +1,28 @@
-//go:build e2e
-
-package e2e_test
+package subcommands
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
-	"testing"
 
 	"crossfuzz/e2e/framework"
 )
 
-func TestSubcommand_Build(t *testing.T) {
-	t.Parallel()
+func init() {
+	r := func(name string, fn func(*framework.T)) {
+		framework.Register(framework.Test{
+			Name: "subcommand." + name,
+			Tags: []string{"subcommand"},
+			Func: fn,
+		})
+	}
+	r("Build", testBuild)
+	r("Reduce", testReduce)
+	r("Analyze_Payload", testAnalyzePayload)
+	r("Analyze_RequiresInput", testAnalyzeRequiresInput)
+}
+
+func testBuild(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
@@ -30,8 +40,7 @@ func TestSubcommand_Build(t *testing.T) {
 	}
 }
 
-func TestSubcommand_Reduce(t *testing.T) {
-	t.Parallel()
+func testReduce(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
@@ -44,13 +53,9 @@ func TestSubcommand_Reduce(t *testing.T) {
 	if r := framework.Build(t, ws); r.ExitCode != 0 {
 		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
 	}
-
-	// Populate the corpus by running a short campaign first.
 	if r := framework.Run(t, ws); r.ExitCode != 0 {
 		t.Fatalf("seed-run failed: %s\n%s", r.Stdout, r.Stderr)
 	}
-	// Reduce reads the union of seeds/ + corpus/, so the input set is the
-	// sum of both. The output is bounded above by that sum.
 	inputCount := len(framework.CorpusFiles(t, ws, "corpus")) + len(framework.CorpusFiles(t, ws, "seeds"))
 	if inputCount < 3 {
 		t.Skipf("only %d input entries after fuzzing; need >=3 to meaningfully test reduce", inputCount)
@@ -72,8 +77,7 @@ func TestSubcommand_Reduce(t *testing.T) {
 	}
 }
 
-func TestSubcommand_Analyze_Payload(t *testing.T) {
-	t.Parallel()
+func testAnalyzePayload(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
@@ -94,8 +98,7 @@ func TestSubcommand_Analyze_Payload(t *testing.T) {
 	}
 }
 
-func TestSubcommand_Analyze_RequiresInput(t *testing.T) {
-	t.Parallel()
+func testAnalyzeRequiresInput(t *framework.T) {
 	framework.RequireCrossfuzzBinary(t)
 	framework.RequireGo(t)
 
