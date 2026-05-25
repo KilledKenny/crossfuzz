@@ -5,11 +5,14 @@ package harness_test
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 
 	"crossfuzz/e2e/framework"
 )
+
+func itoa(n int) string { return strconv.Itoa(n) }
 
 // langCase encapsulates everything that varies between per-harness tests.
 // All four assertions (build artifact, path discovery, agreement, post-warmup
@@ -55,6 +58,12 @@ func runBuildTest(t *testing.T, lc langCase) {
 }
 
 func runPathDiscoveryAndAgreementTest(t *testing.T, lc langCase) {
+	runPathDiscoveryAndAgreementTestN(t, lc, 1)
+}
+
+// runPathDiscoveryAndAgreementTestN is the parameterised version: pass workers
+// > 1 to also exercise the parallel-worker code path.
+func runPathDiscoveryAndAgreementTestN(t *testing.T, lc langCase, workers int) {
 	t.Parallel()
 	framework.RequireCrossfuzzBinary(t)
 	lc.RequireToolchain(t)
@@ -73,10 +82,11 @@ func runPathDiscoveryAndAgreementTest(t *testing.T, lc langCase) {
 		t.Fatal("fixture must ship with at least one seed")
 	}
 
-	res := framework.RunWithTimeout(t, ws, 45*time.Second,
-		"--timeout", "5s",
-		"--max-findings", "9999",
-	)
+	args := []string{"--timeout", "5s", "--max-findings", "9999"}
+	if workers > 1 {
+		args = append(args, "--workers", itoa(workers))
+	}
+	res := framework.RunWithTimeout(t, ws, 60*time.Second, args...)
 	if res.ExitCode != 0 {
 		t.Fatalf("run failed (exit %d)\nstdout:\n%s\nstderr:\n%s", res.ExitCode, res.Stdout, res.Stderr)
 	}

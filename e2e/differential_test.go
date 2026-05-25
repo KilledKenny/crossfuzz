@@ -128,6 +128,100 @@ func TestDifferential_TimeoutFinding(t *testing.T) {
 	}
 }
 
+// ---- Parallel variants ------------------------------------------------------
+// Findings (divergence/crash/timeout) must still be detected and recorded
+// when multiple workers run concurrently. Each worker has its own target
+// processes, so a finding can come from any worker.
+
+func TestDifferential_DivergenceFindingStructure_Parallel(t *testing.T) {
+	t.Parallel()
+	framework.RequireCrossfuzzBinary(t)
+	framework.RequireGo(t)
+
+	ws := framework.NewWorkspace(t, "divergent")
+	ws.RenderConfig(t, map[string]any{
+		"ExecTimeout":     "500ms",
+		"CampaignTimeout": "20s",
+	})
+	if r := framework.Build(t, ws); r.ExitCode != 0 {
+		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
+	}
+	res := framework.RunWithTimeout(t, ws, 40*time.Second, "--max-findings", "5", "--workers", "4")
+	if res.ExitCode != 0 {
+		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
+	}
+	findings := framework.Findings(t, ws, "findings")
+	var divergences []framework.Finding
+	for _, f := range findings {
+		if f.Kind == "divergence" {
+			divergences = append(divergences, f)
+		}
+	}
+	if len(divergences) < 1 {
+		t.Fatalf("expected >=1 divergence finding from divergent fixture with --workers=4; got %d", len(divergences))
+	}
+}
+
+func TestDifferential_CrashFinding_Parallel(t *testing.T) {
+	t.Parallel()
+	framework.RequireCrossfuzzBinary(t)
+	framework.RequireClang19(t)
+
+	ws := framework.NewWorkspace(t, "crashy")
+	ws.RenderConfig(t, map[string]any{
+		"ExecTimeout":     "500ms",
+		"CampaignTimeout": "15s",
+	})
+	if r := framework.Build(t, ws); r.ExitCode != 0 {
+		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
+	}
+	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "5", "--workers", "4")
+	if res.ExitCode != 0 {
+		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
+	}
+	var crashes []framework.Finding
+	for _, f := range framework.Findings(t, ws, "findings") {
+		if f.Kind == "crash" {
+			crashes = append(crashes, f)
+		}
+	}
+	if len(crashes) < 1 {
+		t.Fatalf("expected >=1 crash finding from crashy fixture with --workers=4; got 0")
+	}
+}
+
+func TestDifferential_TimeoutFinding_Parallel(t *testing.T) {
+	t.Parallel()
+	framework.RequireCrossfuzzBinary(t)
+	framework.RequireGo(t)
+
+	ws := framework.NewWorkspace(t, "slow")
+	ws.RenderConfig(t, map[string]any{
+		"ExecTimeout":     "200ms",
+		"CampaignTimeout": "10s",
+	})
+	if r := framework.Build(t, ws); r.ExitCode != 0 {
+		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
+	}
+	res := framework.RunWithTimeout(t, ws, 30*time.Second,
+		"--timeout", "200ms",
+		"--max-findings", "5",
+		"--workers", "4",
+	)
+	if res.ExitCode != 0 {
+		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
+	}
+	var timeouts []framework.Finding
+	for _, f := range framework.Findings(t, ws, "findings") {
+		if f.Kind == "timeout" {
+			timeouts = append(timeouts, f)
+		}
+	}
+	if len(timeouts) < 1 {
+		t.Fatalf("expected >=1 timeout finding from slow fixture with --workers=4; got 0")
+	}
+}
+
 func hasFile(files []string, name string) bool {
 	for _, f := range files {
 		if f == name {

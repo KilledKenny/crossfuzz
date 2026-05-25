@@ -38,7 +38,7 @@ test:
 
 .PHONY: test-e2e
 test-e2e: $(ALL_TARGET)
-	go test -tags=e2e -count=1 ./e2e/...
+	go test -v -tags=e2e -count=1 ./e2e/...
 
 
 ALL_TARGET+= $(HARNESS_TARGET)

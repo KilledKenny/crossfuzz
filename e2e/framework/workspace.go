@@ -28,9 +28,21 @@ type Workspace struct {
 func NewWorkspace(t *testing.T, fixture string) *Workspace {
 	t.Helper()
 	root := repoRoot(t)
-	src := filepath.Join(root, "e2e", "fixtures", fixture)
-	if _, err := os.Stat(src); err != nil {
-		t.Fatalf("fixture %q not found at %s: %v", fixture, src, err)
+	// Resolution order: e2e/fixtures/<name> (the common case) then e2e/<path>
+	// (lets tests under e2e/comparers/<x>/ point at their colocated fixture).
+	candidates := []string{
+		filepath.Join(root, "e2e", "fixtures", fixture),
+		filepath.Join(root, "e2e", fixture),
+	}
+	var src string
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			src = c
+			break
+		}
+	}
+	if src == "" {
+		t.Fatalf("fixture %q not found in e2e/fixtures/ or e2e/", fixture)
 	}
 	dir := t.TempDir()
 	if err := copyTree(src, dir); err != nil {
@@ -104,6 +116,12 @@ func copyTree(src, dst string) error {
 		rel, err := filepath.Rel(src, path)
 		if err != nil {
 			return err
+		}
+		// Skip Go test files that may live alongside a fixture (the case for
+		// e2e/comparers/<x>/, which colocates test and fixture). Copying them
+		// into the tmpdir would cause Go to try to build/run them again.
+		if !info.IsDir() && strings.HasSuffix(path, "_test.go") {
+			return nil
 		}
 		target := filepath.Join(dst, rel)
 		if info.IsDir() {

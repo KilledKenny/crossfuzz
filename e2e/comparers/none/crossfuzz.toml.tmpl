@@ -1,0 +1,25 @@
+[campaign]
+name = "compare_none"
+timeout = "{{or .CampaignTimeout "30m"}}"
+exec_timeout = "500ms"
+max_input_size = 64
+
+[corpus]
+seed_dir = "./seeds"
+corpus_dir = "./corpus"
+findings_dir = "./findings"
+
+[[target]]
+name = "loud_a"
+language = "go"
+binary = "./a/a"
+build_cmd = "cd a && PKGS=$(go list -deps . | grep -vE '^(runtime$|runtime/.*|sync$|sync/.*|internal/.*|reflect$|syscall$|os$|os/.*)' | paste -sd,) && go build -cover -covermode=atomic -coverpkg=\"$PKGS\" -o a ."
+
+[[target]]
+name = "loud_b"
+language = "go"
+binary = "./b/b"
+build_cmd = "cd b && PKGS=$(go list -deps . | grep -vE '^(runtime$|runtime/.*|sync$|sync/.*|internal/.*|reflect$|syscall$|os$|os/.*)' | paste -sd,) && go build -cover -covermode=atomic -coverpkg=\"$PKGS\" -o b ."
+
+[comparator]
+type = "none"

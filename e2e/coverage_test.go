@@ -79,3 +79,37 @@ func TestCoverage_WarmupReducesFlakiness(t *testing.T) {
 		t.Errorf("expected 'warmup masked N/M flaky slots' in stderr after --warmup=20; got stderr:\n%s", res.Stderr)
 	}
 }
+
+// Parallel variant — workers share the corpus and global coverage bitmap.
+// Discovery should still work (and ideally be faster, but we only assert
+// correctness here, not speed).
+func TestCoverage_DiscoveryGrowsCorpusAndEdges_Parallel(t *testing.T) {
+	t.Parallel()
+	framework.RequireCrossfuzzBinary(t)
+	framework.RequireGo(t)
+
+	ws := framework.NewWorkspace(t, "branchy")
+	ws.RenderConfig(t, map[string]any{
+		"ExecTimeout":     "500ms",
+		"CampaignTimeout": "10s",
+	})
+	if r := framework.Build(t, ws); r.ExitCode != 0 {
+		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
+	}
+	seedCount := len(framework.CorpusFiles(t, ws, "seeds"))
+
+	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--timeout", "1s", "--workers", "4")
+	if res.ExitCode != 0 {
+		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
+	}
+	if got := res.Stats.Corpus; got < seedCount+5 {
+		t.Errorf("expected corpus >= seeds+5 (>= %d) with --workers=4, got %d", seedCount+5, got)
+	}
+	if len(res.Ticks) < 2 {
+		t.Fatalf("expected multiple ticks during a 10s run, got %d", len(res.Ticks))
+	}
+	first, last := res.Ticks[0], res.Ticks[len(res.Ticks)-1]
+	if last.Coverage <= first.Coverage {
+		t.Errorf("expected edge count to grow across ticks with --workers=4; first=%d last=%d", first.Coverage, last.Coverage)
+	}
+}

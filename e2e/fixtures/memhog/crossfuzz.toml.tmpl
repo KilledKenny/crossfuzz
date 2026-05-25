@@ -1,0 +1,19 @@
+[campaign]
+name = "memhog"
+timeout = "{{or .CampaignTimeout "30m"}}"
+exec_timeout = "{{or .ExecTimeout "2s"}}"
+max_input_size = 64
+
+[corpus]
+seed_dir = "./seeds"
+corpus_dir = "./corpus"
+findings_dir = "./findings"
+
+[[target]]
+name = "memhog"
+language = "c"
+binary = "./c/memhog"
+build_cmd = "cd c && clang-19 -fsanitize-coverage=trace-pc-guard -O2 -I {{.RepoRoot}}/harness/c -o memhog memhog.c {{.RepoRoot}}/harness/c/crossfuzz.c && (command -v patchelf >/dev/null && patchelf --set-interpreter $(patchelf --print-interpreter $(which ls)) memhog || true)"
+
+[comparator]
+type = "none"

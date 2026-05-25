@@ -20,3 +20,10 @@ func TestGoHarness_PathDiscoveryAndAgreement(t *testing.T)  { runPathDiscoveryAn
 func TestGoHarness_CoverageStabilityAfterWarmup(t *testing.T) {
 	runCoverageStabilityTest(t, goCase)
 }
+
+// Parallel variant — exercises the multi-worker code path (each worker has
+// its own target processes, comparator, and filter; corpus + global coverage
+// bitmap are shared).
+func TestGoHarness_PathDiscoveryAndAgreement_Parallel(t *testing.T) {
+	runPathDiscoveryAndAgreementTestN(t, goCase, 4)
+}

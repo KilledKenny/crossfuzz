@@ -226,6 +226,35 @@ func TestCLI_Validate(t *testing.T) {
 	}
 }
 
+func TestCLI_MaxMemory_CrashesTargetOnOverflow(t *testing.T) {
+	t.Parallel()
+	framework.RequireCrossfuzzBinary(t)
+	framework.RequireGo(t)
+
+	framework.RequireClang19(t)
+	// The memhog fixture allocates 512 MiB when the input begins with 'M'.
+	// Under --max-memory=128M the RLIMIT_AS bound makes that allocation
+	// fail and the target aborts → crash finding.
+	ws := framework.NewWorkspace(t, "memhog")
+	ws.RenderConfig(t, map[string]any{
+		"ExecTimeout":     "2s",
+		"CampaignTimeout": "15s",
+	})
+	if r := framework.Build(t, ws); r.ExitCode != 0 {
+		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
+	}
+	res := framework.RunWithTimeout(t, ws, 45*time.Second,
+		"--max-memory", "128M",
+		"--max-findings", "3",
+	)
+	if res.ExitCode != 0 {
+		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
+	}
+	if res.Stats.Crashes == 0 {
+		t.Errorf("expected >=1 crash from memhog under --max-memory=512M; got 0\nstdout:\n%s", res.Stdout)
+	}
+}
+
 func TestCLI_RootBuildFlag(t *testing.T) {
 	t.Parallel()
 	framework.RequireCrossfuzzBinary(t)
