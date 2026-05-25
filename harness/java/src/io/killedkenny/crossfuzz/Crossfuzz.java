@@ -16,6 +16,33 @@ import java.util.Map;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Java harness for cross-language differential fuzzing with
+ * <a href="https://github.com/KilledKenny/cross_fuzz">crossfuzz</a>.
+ *
+ * <p>Targets implement one of the three functional interfaces ({@link FuzzTarget},
+ * {@link FilterTarget}, or {@link CompareTarget}) and pass it to the matching
+ * static entry point ({@link #fuzz}, {@link #filter}, or {@link #compare}).
+ * The harness handles all coordinator communication, shared-memory I/O, and
+ * coverage instrumentation.
+ *
+ * <p>Typical usage:
+ * <pre>{@code
+ * public class MyTarget {
+ *     public static void main(String[] args) throws Exception {
+ *         Crossfuzz.fuzz(input -> {
+ *             // process input, return output bytes
+ *             return process(input);
+ *         });
+ *     }
+ * }
+ * }</pre>
+ *
+ * <p>Run with the coverage agent:
+ * <pre>{@code
+ * java -javaagent:crossfuzz.jar -cp crossfuzz.jar:. MyTarget
+ * }</pre>
+ */
 public class Crossfuzz {
 
     // Shared memory layout — must match pkg/coverage/shmem.go
@@ -38,44 +65,126 @@ public class Crossfuzz {
     // Shared memory buffer set by openShm()
     private static volatile MappedByteBuffer shm;
 
-    // ---- Settings ----
-
+    /**
+     * Configures harness behaviour. All three entry points ({@link Crossfuzz#fuzz},
+     * {@link Crossfuzz#filter}, {@link Crossfuzz#compare}) accept the same
+     * {@code Settings}; fields irrelevant to a particular mode are ignored.
+     */
     public static class Settings {
+        /**
+         * Enables automatic coverage instrumentation via the Java agent.
+         * Set to {@code false} when the harness is a thin shim and coverage
+         * comes from an instrumented server process instead.
+         * Default: {@code true}.
+         */
         public boolean instrument = true;
+
+        /**
+         * Number of warmup iterations to run before the main loop to discover
+         * and mask flaky coverage slots caused by JIT compilation or GC noise.
+         * Currently a no-op placeholder; not yet implemented in the Java harness.
+         * Default: {@code 0}.
+         */
         public int warmup = 0;
+
+        /**
+         * Relevant only in {@link Crossfuzz#filter filter} mode. When {@code true},
+         * the filter may return transformed bytes that replace the original input
+         * for downstream fuzz targets. When {@code false}, accepted inputs are
+         * forwarded as-is and the filter's return value is ignored.
+         * Default: {@code false}.
+         */
         public boolean transform = false;
+
+        /**
+         * Placeholder for future fuzzing-hint support. Currently a no-op.
+         * Default: {@code false}.
+         */
         public boolean hinting = false;
     }
 
-    // ---- Target interfaces ----
-
+    /**
+     * Target function for fuzz mode. Receives raw input bytes and returns
+     * output bytes that the coordinator compares across all targets.
+     */
     @FunctionalInterface
     public interface FuzzTarget {
+        /**
+         * Processes {@code input} and returns the result. Throwing any exception
+         * is treated as a non-fatal error: the run is marked failed and the
+         * coordinator moves on to the next input.
+         *
+         * @param input raw bytes generated or mutated by the coordinator
+         * @return output bytes to be compared; {@code null} is treated as empty
+         * @throws Exception on any processing error
+         */
         byte[] fuzz(byte[] input) throws Exception;
     }
 
+    /**
+     * Target function for filter mode. Decides whether an input should be
+     * forwarded to fuzz targets, optionally transforming it first.
+     */
     @FunctionalInterface
     public interface FilterTarget {
+        /**
+         * Evaluates {@code input} and returns a {@link FilterResult} indicating
+         * whether it should be forwarded and, when {@link Settings#transform} is
+         * enabled, the transformed bytes to use instead.
+         *
+         * @param input raw bytes from the coordinator
+         * @return filter decision; must not be {@code null}
+         * @throws Exception on any processing error
+         */
         FilterResult filter(byte[] input) throws Exception;
     }
 
+    /** Return value from a {@link FilterTarget}. */
     public static class FilterResult {
+        /** Transformed (or original) bytes to forward when {@code accepted} is {@code true}. */
         public final byte[] output;
+        /** {@code true} if the input should be forwarded to fuzz targets. */
         public final boolean accepted;
 
+        /**
+         * @param output  bytes to forward; may be {@code null} when {@code accepted} is {@code false}
+         * @param accepted whether the input passes the filter
+         */
         public FilterResult(byte[] output, boolean accepted) {
             this.output = output;
             this.accepted = accepted;
         }
     }
 
+    /**
+     * Target function for compare mode. Receives the outputs produced by all
+     * fuzz targets for the same input and returns a non-empty string describing
+     * any mismatch, or {@code null}/{@code ""} if all outputs agree.
+     */
     @FunctionalInterface
     public interface CompareTarget {
+        /**
+         * Compares {@code targetOutputs} from each named target and returns a
+         * human-readable mismatch description, or {@code null} if they agree.
+         *
+         * @param input         the original input that was sent to all targets
+         * @param targetNames   names of the targets in the same order as {@code targetOutputs}
+         * @param targetOutputs raw output bytes from each target
+         * @return mismatch description, or {@code null}/{@code ""} if outputs agree
+         * @throws Exception on any processing error
+         */
         String compare(byte[] input, String[] targetNames, byte[][] targetOutputs) throws Exception;
     }
 
     // ---- Standalone functions ----
 
+    /**
+     * Maps the shared memory region identified by the {@code CROSSFUZZ_SHM}
+     * environment variable. Called automatically by {@link #fuzz}, {@link #filter},
+     * and {@link #compare}; only call this directly for custom lifecycle management.
+     *
+     * @throws Exception if {@code CROSSFUZZ_SHM} is unset or the file cannot be mapped
+     */
     public static void openShm() throws Exception {
         String shmPath = System.getenv("CROSSFUZZ_SHM");
         if (shmPath == null) throw new RuntimeException("CROSSFUZZ_SHM not set");
@@ -86,6 +195,12 @@ public class Crossfuzz {
         shm = mapped;
     }
 
+    /**
+     * Hands the coverage bitmap slice of the shared memory region to
+     * {@link CoverageRuntime} so that instrumented code can record hits.
+     * Called automatically by {@link #fuzz} and {@link #filter} when
+     * {@link Settings#instrument} is {@code true}.
+     */
     public static void startInstrumentation() {
         if (shm == null) return;
         ByteBuffer covSlice = shm.duplicate();
@@ -95,20 +210,39 @@ public class Crossfuzz {
         CoverageRuntime.init(covSlice.slice());
     }
 
+    /**
+     * Clears all coverage counters in the shared memory bitmap.
+     * Delegates to {@link CoverageRuntime#clear()}.
+     */
     public static void clearInstrumentation() {
         CoverageRuntime.clear();
     }
 
+    /**
+     * Flushes any pending coverage data to shared memory.
+     * This is a no-op in the Java harness (hits are written directly);
+     * it exists for API symmetry with the Go harness.
+     */
     public static void collectInstrumentation() {
         CoverageRuntime.collect();
     }
 
+    /**
+     * Writes a status code into the shared memory status field.
+     *
+     * @param status {@link #STATUS_OK} or {@link #STATUS_ERROR}
+     */
     public static void setStatus(int status) {
         if (shm != null) shm.putInt(OFF_STATUS, status);
     }
 
-    // ---- Server convenience ----
-
+    /**
+     * Convenience initialiser for server-mode targets. Maps shared memory and
+     * starts instrumentation if {@code CROSSFUZZ_SHM} is set; does nothing
+     * if the environment variable is absent (e.g. when running outside crossfuzz).
+     *
+     * @throws Exception if the shared memory file cannot be mapped
+     */
     public static void initServer() throws Exception {
         String shmPath = System.getenv("CROSSFUZZ_SHM");
         if (shmPath == null) return;
@@ -118,10 +252,27 @@ public class Crossfuzz {
 
     // ---- Fuzz ----
 
+    /**
+     * Runs the fuzz loop with default {@link Settings}.
+     *
+     * @param target the function under test
+     * @throws Exception on I/O or shared-memory errors
+     * @see #fuzz(FuzzTarget, Settings)
+     */
     public static void fuzz(FuzzTarget target) throws Exception {
         fuzz(target, new Settings());
     }
 
+    /**
+     * Runs the fuzz loop: reads inputs from shared memory, calls {@code target},
+     * writes outputs back, and signals the coordinator via the pipe protocol.
+     * Blocks until the coordinator sends a {@code shutdown} message or the pipe
+     * is closed.
+     *
+     * @param target   the function under test
+     * @param settings harness configuration
+     * @throws Exception on I/O or shared-memory errors
+     */
     public static void fuzz(FuzzTarget target, Settings settings) throws Exception {
         if (shm == null) {
             openShm();
@@ -173,10 +324,29 @@ public class Crossfuzz {
 
     // ---- Filter ----
 
+    /**
+     * Runs the filter loop with default {@link Settings}.
+     *
+     * @param target the filter function
+     * @throws Exception on I/O or shared-memory errors
+     * @see #filter(FilterTarget, Settings)
+     */
     public static void filter(FilterTarget target) throws Exception {
         filter(target, new Settings());
     }
 
+    /**
+     * Runs the filter loop: reads candidate inputs from the coordinator, calls
+     * {@code target} to decide whether to accept them, and reports the decision
+     * back. When {@link Settings#transform} is {@code true}, the filter's output
+     * bytes replace the original input for downstream fuzz targets.
+     * Blocks until the coordinator sends a {@code shutdown} message or the pipe
+     * is closed.
+     *
+     * @param target   the filter function
+     * @param settings harness configuration
+     * @throws Exception on I/O or shared-memory errors
+     */
     public static void filter(FilterTarget target, Settings settings) throws Exception {
         if (shm == null) {
             openShm();
@@ -234,10 +404,32 @@ public class Crossfuzz {
 
     // ---- Compare ----
 
+    /**
+     * Runs the compare loop with default {@link Settings}.
+     *
+     * @param target the comparison function
+     * @throws Exception on I/O or shared-memory errors
+     * @see #compare(CompareTarget, Settings)
+     */
     public static void compare(CompareTarget target) throws Exception {
         compare(target, new Settings());
     }
 
+    /**
+     * Runs the compare loop: reads the outputs each fuzz target wrote to its own
+     * shared memory region, collects them, and calls {@code target} to determine
+     * whether they agree. Any non-empty return value is treated as a mismatch and
+     * saved to the findings directory.
+     * Blocks until the coordinator sends a {@code shutdown} message or the pipe
+     * is closed.
+     *
+     * <p>Requires the {@code CROSSFUZZ_SHM_TARGETS} environment variable to be set
+     * by the coordinator with a JSON map of {@code {"name":"shmPath",...}}.
+     *
+     * @param target   the comparison function
+     * @param settings harness configuration
+     * @throws Exception if {@code CROSSFUZZ_SHM_TARGETS} is unset or I/O fails
+     */
     public static void compare(CompareTarget target, Settings settings) throws Exception {
         String targetsJson = System.getenv("CROSSFUZZ_SHM_TARGETS");
         if (targetsJson == null) {
