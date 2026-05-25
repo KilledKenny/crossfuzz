@@ -1,0 +1,70 @@
+[campaign]
+name = "byte_echo"
+timeout = "{{or .CampaignTimeout "30m"}}"
+exec_timeout = "{{or .ExecTimeout "1s"}}"
+max_input_size = {{or .MaxInputSize 256}}
+
+[corpus]
+seed_dir = "./seeds"
+corpus_dir = "./corpus"
+findings_dir = "./findings"
+
+{{if .Go}}
+[[target]]
+name = "go_echo"
+language = "go"
+binary = "./go/go_echo"
+build_cmd = "cd go && PKGS=$(go list -deps . | grep -vE '^(runtime$|runtime/.*|sync$|sync/.*|internal/.*|reflect$|syscall$|os$|os/.*)' | paste -sd,) && go build -cover -covermode=atomic -coverpkg=\"$PKGS\" -o go_echo ."
+{{end}}
+
+{{if .C}}
+[[target]]
+name = "c_echo"
+language = "c"
+binary = "./c/c_echo"
+build_cmd = "cd c && clang-19 -fsanitize-coverage=trace-pc-guard -O2 -I {{.RepoRoot}}/harness/c -o c_echo c_echo.c {{.RepoRoot}}/harness/c/crossfuzz.c && (command -v patchelf >/dev/null && patchelf --set-interpreter $(patchelf --print-interpreter $(which ls)) c_echo || true)"
+{{end}}
+
+{{if .Cpp}}
+[[target]]
+name = "cpp_echo"
+language = "cpp"
+binary = "./cpp/cpp_echo"
+build_cmd = "cd cpp && clang-19 -fsanitize-coverage=trace-pc-guard -O2 -c {{.RepoRoot}}/harness/c/crossfuzz.c -o crossfuzz_c.o && clang++-19 -std=c++23 -fsanitize-coverage=trace-pc-guard -O2 -I {{.RepoRoot}}/harness/c -I {{.RepoRoot}}/harness/cpp -o cpp_echo cpp_echo.cpp {{.RepoRoot}}/harness/cpp/crossfuzz.cpp crossfuzz_c.o && rm crossfuzz_c.o && (command -v patchelf >/dev/null && NIX_INTERP=$(patchelf --print-interpreter $(which ls)) && NIX_STDCXX=$(dirname $(g++ -print-file-name=libstdc++.so.6)) && ORIG_RPATH=$(patchelf --print-rpath cpp_echo | tr ':' '\\n' | grep -v '/lib/x86_64-linux-gnu' | paste -sd':') && patchelf --set-interpreter $NIX_INTERP --set-rpath $NIX_STDCXX:$ORIG_RPATH cpp_echo || true)"
+{{end}}
+
+{{if .Java}}
+[[target]]
+name = "java_echo"
+language = "java"
+binary = "java"
+args = ["-javaagent:{{.RepoRoot}}/harness/java/build/libs/crossfuzz.jar", "-cp", "{{.RepoRoot}}/harness/java/build/libs/crossfuzz.jar:./java", "JavaEcho"]
+build_cmd = "cd java && javac -cp {{.RepoRoot}}/harness/java/build/libs/crossfuzz.jar JavaEcho.java"
+{{end}}
+
+{{if .JS}}
+[[target]]
+name = "js_echo"
+language = "js"
+binary = "bun"
+args = ["run", "--preload", "{{.RepoRoot}}/harness/js/instrument.ts", "./js/echo.js"]
+{{end}}
+
+{{if .Python}}
+[[target]]
+name = "python_echo"
+language = "python"
+binary = "{{.RepoRoot}}/harness/python/.venv/bin/python3"
+args = ["./python/echo.py"]
+{{end}}
+
+{{if .Rust}}
+[[target]]
+name = "rust_echo"
+language = "rust"
+binary = "./rust/target/release/rust_echo"
+build_cmd = "cd rust && cargo rustc --release -- -C passes=sancov-module -C llvm-args=-sanitizer-coverage-level=3 -C llvm-args=-sanitizer-coverage-trace-pc-guard"
+{{end}}
+
+[comparator]
+type = "byte_equal"

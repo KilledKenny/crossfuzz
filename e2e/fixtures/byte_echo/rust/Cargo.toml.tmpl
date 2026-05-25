@@ -1,0 +1,11 @@
+[package]
+name = "rust_echo"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "rust_echo"
+path = "src/main.rs"
+
+[dependencies]
+crossfuzz-harness = { path = "{{.RepoRoot}}/harness/rust" }

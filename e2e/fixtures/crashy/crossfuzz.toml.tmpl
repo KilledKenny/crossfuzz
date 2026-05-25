@@ -1,0 +1,19 @@
+[campaign]
+name = "crashy"
+timeout = "{{or .CampaignTimeout "30m"}}"
+exec_timeout = "{{or .ExecTimeout "1s"}}"
+max_input_size = {{or .MaxInputSize 64}}
+
+[corpus]
+seed_dir = "./seeds"
+corpus_dir = "./corpus"
+findings_dir = "./findings"
+
+[[target]]
+name = "crashy"
+language = "c"
+binary = "./c/crashy"
+build_cmd = "cd c && clang-19 -fsanitize-coverage=trace-pc-guard -O2 -I {{.RepoRoot}}/harness/c -o crashy crashy.c {{.RepoRoot}}/harness/c/crossfuzz.c && (command -v patchelf >/dev/null && patchelf --set-interpreter $(patchelf --print-interpreter $(which ls)) crashy || true)"
+
+[comparator]
+type = "none"

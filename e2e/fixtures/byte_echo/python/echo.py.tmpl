@@ -1,0 +1,23 @@
+import sys
+
+sys.path.insert(0, "{{.RepoRoot}}/harness/python")
+import crossfuzz
+
+
+def echo(data: bytes) -> bytes:
+    out = bytearray(len(data))
+    for i, b in enumerate(data):
+        if b < 0x20:
+            out[i] = b
+        elif b < 0x40:
+            out[i] = b
+        elif b < 0x60:
+            out[i] = b
+        elif b < 0x80:
+            out[i] = b
+        else:
+            out[i] = b
+    return bytes(out)
+
+
+crossfuzz.fuzz(echo)

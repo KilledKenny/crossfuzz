@@ -36,6 +36,10 @@ harness/js/node_modules: harness/js/package.json harness/js/bun.lock
 test:
 	go test -race ./...
 
+.PHONY: test-e2e
+test-e2e: $(ALL_TARGET)
+	go test -tags=e2e -count=1 ./e2e/...
+
 
 ALL_TARGET+= $(HARNESS_TARGET)
 .PHONY: harness

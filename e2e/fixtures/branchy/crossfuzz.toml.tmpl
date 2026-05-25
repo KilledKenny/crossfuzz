@@ -1,0 +1,19 @@
+[campaign]
+name = "branchy"
+timeout = "{{or .CampaignTimeout "30m"}}"
+exec_timeout = "{{or .ExecTimeout "1s"}}"
+max_input_size = {{or .MaxInputSize 256}}
+
+[corpus]
+seed_dir = "./seeds"
+corpus_dir = "./corpus"
+findings_dir = "./findings"
+
+[[target]]
+name = "branchy"
+language = "go"
+binary = "./go/branchy"
+build_cmd = "cd go && PKGS=$(go list -deps . | grep -vE '^(runtime$|runtime/.*|sync$|sync/.*|internal/.*|reflect$|syscall$|os$|os/.*)' | paste -sd,) && go build -cover -covermode=atomic -coverpkg=\"$PKGS\" -o branchy ."
+
+[comparator]
+type = "byte_equal"

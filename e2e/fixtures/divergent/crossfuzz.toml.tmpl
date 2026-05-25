@@ -1,0 +1,25 @@
+[campaign]
+name = "divergent"
+timeout = "{{or .CampaignTimeout "30m"}}"
+exec_timeout = "{{or .ExecTimeout "1s"}}"
+max_input_size = {{or .MaxInputSize 256}}
+
+[corpus]
+seed_dir = "./seeds"
+corpus_dir = "./corpus"
+findings_dir = "./findings"
+
+[[target]]
+name = "good"
+language = "go"
+binary = "./good/good"
+build_cmd = "cd good && PKGS=$(go list -deps . | grep -vE '^(runtime$|runtime/.*|sync$|sync/.*|internal/.*|reflect$|syscall$|os$|os/.*)' | paste -sd,) && go build -cover -covermode=atomic -coverpkg=\"$PKGS\" -o good ."
+
+[[target]]
+name = "buggy"
+language = "go"
+binary = "./buggy/buggy"
+build_cmd = "cd buggy && PKGS=$(go list -deps . | grep -vE '^(runtime$|runtime/.*|sync$|sync/.*|internal/.*|reflect$|syscall$|os$|os/.*)' | paste -sd,) && go build -cover -covermode=atomic -coverpkg=\"$PKGS\" -o buggy ."
+
+[comparator]
+type = "byte_equal"

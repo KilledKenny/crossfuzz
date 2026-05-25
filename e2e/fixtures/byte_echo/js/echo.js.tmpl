@@ -1,0 +1,16 @@
+import { fuzz } from "{{.RepoRoot}}/harness/js/crossfuzz.ts";
+
+function echo(input) {
+  const out = new Uint8Array(input.length);
+  for (let i = 0; i < input.length; i++) {
+    const b = input[i];
+    if (b < 0x20)      out[i] = b;
+    else if (b < 0x40) out[i] = b;
+    else if (b < 0x60) out[i] = b;
+    else if (b < 0x80) out[i] = b;
+    else               out[i] = b;
+  }
+  return out;
+}
+
+fuzz(echo);
