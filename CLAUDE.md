@@ -22,6 +22,10 @@ make harness
 
 # Run a fuzzing campaign
 ./bin/crossfuzz run crossfuzz.toml
+
+# Run the end-to-end suite (drives the real coordinator across every language
+# harness). Use as a final verification for larger changes — takes ~1-5 min.
+make test-e2e
 ```
 
 ## Architecture
