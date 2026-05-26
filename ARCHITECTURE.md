@@ -1,8 +1,8 @@
-# cross_fuzz Architecture
+# crossfuzz Architecture
 
 ## Overview
 
-cross_fuzz is a **coverage-guided differential fuzzing** tool for finding behavioral discrepancies across equivalent implementations in C, C++, Go, Java, and JavaScript.
+crossfuzz is a **coverage-guided differential fuzzing** tool for finding behavioral discrepancies across equivalent implementations in C, C++, Go, Java, and JavaScript.
 
 **Core idea:** Generate inputs, feed them to all implementations simultaneously, collect coverage feedback from every target, use the combined coverage to guide mutation, and flag any case where outputs diverge.
 
@@ -235,7 +235,7 @@ The coordinator writes to the input region; the worker writes to the output regi
 
 ### 7. Comparison Framework (`pkg/compare/`)
 
-The comparator is what makes cross_fuzz a *differential* fuzzer.
+The comparator is what makes crossfuzz a *differential* fuzzer.
 
 **Interface:**
 
@@ -315,7 +315,7 @@ clang -fsanitize-coverage=trace-pc-guard -o target target.c harness/c/crossfuzz.
 ```go
 package main
 
-import "github.com/user/cross_fuzz/harness/gofuzz"
+import "github.com/user/crossfuzz/harness/gofuzz"
 
 func target(data []byte) ([]byte, error) {
     // process data, return result
@@ -427,7 +427,7 @@ type = "json_structural"        # Built-in comparator
 ## Project Structure
 
 ```
-cross_fuzz/
+crossfuzz/
 ├── go.mod
 ├── go.sum
 ├── ARCHITECTURE.md

@@ -1,6 +1,6 @@
 # Examples
 
-Each subdirectory is a self-contained cross_fuzz campaign. Inside, `crossfuzz.toml` describes the targets, comparator, and corpus layout.
+Each subdirectory is a self-contained crossfuzz campaign. Inside, `crossfuzz.toml` describes the targets, comparator, and corpus layout.
 
 | Example                        | What it demonstrates                                                                                              |
 |--------------------------------|-------------------------------------------------------------------------------------------------------------------|

@@ -1,4 +1,4 @@
-// Package crossfuzz provides the cross_fuzz harness for Go targets.
+// Package crossfuzz provides the crossfuzz harness for Go targets.
 //
 // It exposes three entry points — Fuzz, Filter, and Compare — plus standalone
 // functions for server-mode targets that manage their own SHM and

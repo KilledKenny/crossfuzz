@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "crossfuzz"
 version = "0.0.1"
-description = "Python harness for the cross_fuzz differential fuzzer"
+description = "Python harness for the crossfuzz differential fuzzer"
 readme = "README.md"
 requires-python = ">=3.8"
 license = { file = "LICENSE" }
@@ -33,9 +33,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/KilledKenny/cross_fuzz"
-Source = "https://github.com/KilledKenny/cross_fuzz"
-Issues = "https://github.com/KilledKenny/cross_fuzz/issues"
+Homepage = "https://github.com/KilledKenny/crossfuzz"
+Source = "https://github.com/KilledKenny/crossfuzz"
+Issues = "https://github.com/KilledKenny/crossfuzz/issues"
 
 [tool.hatch.build.targets.wheel]
 only-include = ["crossfuzz.py"]

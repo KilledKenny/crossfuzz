@@ -1,5 +1,5 @@
 /**
- * JavaScript/TypeScript base64 target for cross_fuzz.
+ * JavaScript/TypeScript base64 target for crossfuzz.
  *
  * Run without coverage (no feedback, still finds byte-level discrepancies):
  *   bun run ./target.ts

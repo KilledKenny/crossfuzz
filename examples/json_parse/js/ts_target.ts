@@ -1,5 +1,5 @@
 /**
- * TypeScript JSON parse target for cross_fuzz.
+ * TypeScript JSON parse target for crossfuzz.
  *
  * Hand-rolled recursive-descent parser — no built-in JSON parser used.
  * Returns the root value type as ASCII bytes:

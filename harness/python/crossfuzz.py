@@ -1,6 +1,6 @@
-"""cross_fuzz Python harness.
+"""crossfuzz Python harness.
 
-Handles IPC between the cross_fuzz coordinator and a Python target. You write
+Handles IPC between the crossfuzz coordinator and a Python target. You write
 the target function; the harness manages shared memory, pipes, and coverage.
 
 Usage::

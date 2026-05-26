@@ -1,11 +1,11 @@
 ---
 name: crossfuzz-harness
-description: Use this skill when the user wants to add a new target to a cross_fuzz campaign, write a crossfuzz.toml config, understand how harnesses work, choose which language to write a target in, learn about the IPC protocol between the coordinator and a target process, or understand the shared-memory layout, coverage bitmap, or pipe messages. Trigger for questions like "how do I add a new target?", "how do I write the config?", "what does a harness do?", "how does cross_fuzz communicate with my process?", "what does fd 3 do?", "what is the coverage bitmap format?", "how does the bitmap merge work?", "what is `instrument` for?", "how do I write an input filter?", "how do I write a comparator harness?", or "how do I set up a server target?".
+description: Use this skill when the user wants to add a new target to a crossfuzz campaign, write a crossfuzz.toml config, understand how harnesses work, choose which language to write a target in, learn about the IPC protocol between the coordinator and a target process, or understand the shared-memory layout, coverage bitmap, or pipe messages. Trigger for questions like "how do I add a new target?", "how do I write the config?", "what does a harness do?", "how does crossfuzz communicate with my process?", "what does fd 3 do?", "what is the coverage bitmap format?", "how does the bitmap merge work?", "what is `instrument` for?", "how do I write an input filter?", "how do I write a comparator harness?", or "how do I set up a server target?".
 ---
 
-# cross_fuzz Harness Overview
+# crossfuzz Harness Overview
 
-A **harness** is a thin library that handles the IPC between the cross_fuzz coordinator and your target process. You write the target function; the harness handles everything else.
+A **harness** is a thin library that handles the IPC between the crossfuzz coordinator and your target process. You write the target function; the harness handles everything else.
 
 ## What a harness does
 

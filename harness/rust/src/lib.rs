@@ -1,6 +1,6 @@
-//! cross_fuzz Rust harness.
+//! crossfuzz Rust harness.
 //!
-//! Handles IPC between the cross_fuzz coordinator and your Rust target. You
+//! Handles IPC between the crossfuzz coordinator and your Rust target. You
 //! write the target function; the harness manages shared memory, pipes, and
 //! coverage collection.
 //!

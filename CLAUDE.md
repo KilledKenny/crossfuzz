@@ -30,7 +30,7 @@ make test-e2e
 
 ## Architecture
 
-cross_fuzz is a coverage-guided **differential fuzzer**: it sends the same generated input to multiple implementations of the same function (across C, C++, Go, Java, JS/TS), collects coverage from all targets, merges it into a shared bitmap, and flags any divergence in outputs.
+crossfuzz is a coverage-guided **differential fuzzer**: it sends the same generated input to multiple implementations of the same function (across C, C++, Go, Java, JS/TS), collects coverage from all targets, merges it into a shared bitmap, and flags any divergence in outputs.
 
 ### Data flow per iteration
 

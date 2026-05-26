@@ -1,4 +1,4 @@
-# cross_fuzz e2e tests
+# crossfuzz e2e tests
 
 End-to-end tests that drive `bin/crossfuzz` as a subprocess and assert on its
 observable outputs (stdout stats, exit codes, corpus/findings directories).

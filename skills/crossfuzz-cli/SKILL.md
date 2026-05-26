@@ -1,11 +1,11 @@
 ---
 name: crossfuzz-cli
-description: Use this skill whenever the user asks about running cross_fuzz, understanding CLI commands (build/run/reduce/analyze), CLI flags, reading findings, or troubleshooting a fuzzing campaign. Trigger for questions like "how do I run cross_fuzz?", "what does --workers do?", "what does `analyze` do?", "what comparator should I use?", or "why are there no findings?". For writing the crossfuzz.toml config itself, the **crossfuzz-harness** skill owns the schema.
+description: Use this skill whenever the user asks about running crossfuzz, understanding CLI commands (build/run/reduce/analyze), CLI flags, reading findings, or troubleshooting a fuzzing campaign. Trigger for questions like "how do I run crossfuzz?", "what does --workers do?", "what does `analyze` do?", "what comparator should I use?", or "why are there no findings?". For writing the crossfuzz.toml config itself, the **crossfuzz-harness** skill owns the schema.
 ---
 
-# cross_fuzz CLI
+# crossfuzz CLI
 
-cross_fuzz is a coverage-guided differential fuzzer. It feeds the same input to multiple language implementations of the same function and flags any output divergence.
+crossfuzz is a coverage-guided differential fuzzer. It feeds the same input to multiple language implementations of the same function and flags any output divergence.
 
 ## Workflow
 

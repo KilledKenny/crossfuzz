@@ -66,7 +66,7 @@ publishing {
             pom {
                 name = 'crossfuzz Java Harness'
                 description = 'Java harness for cross-language differential fuzzing with crossfuzz'
-                url = 'https://github.com/KilledKenny/cross_fuzz'
+                url = 'https://github.com/KilledKenny/crossfuzz'
 
                 licenses {
                     license {
@@ -84,9 +84,9 @@ publishing {
                 }
 
                 scm {
-                    connection = 'scm:git:git://github.com/KilledKenny/cross_fuzz.git'
-                    developerConnection = 'scm:git:ssh://github.com/KilledKenny/cross_fuzz.git'
-                    url = 'https://github.com/KilledKenny/cross_fuzz'
+                    connection = 'scm:git:git://github.com/KilledKenny/crossfuzz.git'
+                    developerConnection = 'scm:git:ssh://github.com/KilledKenny/crossfuzz.git'
+                    url = 'https://github.com/KilledKenny/crossfuzz'
                 }
             }
         }

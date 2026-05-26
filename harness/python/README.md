@@ -1,6 +1,6 @@
 # crossfuzz
 
-Python harness for [cross_fuzz](https://github.com/KilledKenny/cross_fuzz), a
+Python harness for [crossfuzz](https://github.com/KilledKenny/crossfuzz), a
 coverage-guided **differential fuzzer** across C, C++, Go, Java,
 JavaScript/TypeScript, Python, and Rust. The coordinator sends the same
 generated input to multiple implementations of the same function, collects
@@ -17,7 +17,7 @@ pip install crossfuzz
 ```
 
 You also need the `crossfuzz` coordinator binary — see the
-[main repo](https://github.com/KilledKenny/cross_fuzz) for build/install instructions.
+[main repo](https://github.com/KilledKenny/crossfuzz) for build/install instructions.
 
 ## Quick start
 

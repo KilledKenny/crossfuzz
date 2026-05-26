@@ -18,7 +18,7 @@ import java.util.List;
 
 /**
  * Java harness for cross-language differential fuzzing with
- * <a href="https://github.com/KilledKenny/cross_fuzz">crossfuzz</a>.
+ * <a href="https://github.com/KilledKenny/crossfuzz">crossfuzz</a>.
  *
  * <p>Targets implement one of the three functional interfaces ({@link FuzzTarget},
  * {@link FilterTarget}, or {@link CompareTarget}) and pass it to the matching

@@ -1,8 +1,8 @@
-# cross_fuzz
+# crossfuzz
 
 Coverage-guided **differential fuzzer** across C, C++, Go, Java, JavaScript / TypeScript, Python, and Rust.
 
-cross_fuzz feeds the same generated input to multiple implementations of the same function, collects coverage from every target into a shared bitmap, and uses that combined coverage to guide mutation. Whenever the outputs disagree, the input is saved as a finding. A new code path discovered in one language can lead to a bug being uncovered in another.
+crossfuzz feeds the same generated input to multiple implementations of the same function, collects coverage from every target into a shared bitmap, and uses that combined coverage to guide mutation. Whenever the outputs disagree, the input is saved as a finding. A new code path discovered in one language can lead to a bug being uncovered in another.
 
 ## Supported languages
 
@@ -22,7 +22,7 @@ cross_fuzz feeds the same generated input to multiple implementations of the sam
 ### From source (`go install`)
 
 ```bash
-go install github.com/KilledKenny/cross_fuzz/cmd/crossfuzz@latest
+go install github.com/KilledKenny/crossfuzz/cmd/crossfuzz@latest
 ```
 
 ### Prebuilt binaries
@@ -32,15 +32,15 @@ go install github.com/KilledKenny/cross_fuzz/cmd/crossfuzz@latest
 ### Local clone
 
 ```bash
-git clone https://github.com/KilledKenny/cross_fuzz
-cd cross_fuzz
+git clone https://github.com/KilledKenny/crossfuzz
+cd crossfuzz
 make bin/crossfuzz     # just the coordinator
 make                   # coordinator + all bundled harnesses (Java jar, JS, Python, Rust)
 ```
 
 ## Basic usage
 
-cross_fuzz is driven by a TOML config that lists the targets to fuzz and how to compare their outputs. The three commands you will use most:
+crossfuzz is driven by a TOML config that lists the targets to fuzz and how to compare their outputs. The three commands you will use most:
 
 ```bash
 crossfuzz build path/to/crossfuzz.toml      # run each target's build_cmd

@@ -1,5 +1,5 @@
 /**
- * cross_fuzz harness for JavaScript/TypeScript targets running under Bun.
+ * crossfuzz harness for JavaScript/TypeScript targets running under Bun.
  *
  * Usage:
  *   import { fuzz } from "@crossfuzz/crossfuzz";
