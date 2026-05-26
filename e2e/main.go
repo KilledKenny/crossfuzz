@@ -30,6 +30,7 @@ func main() {
 		failFast  = flag.Bool("failfast", false, "stop dispatching new tests after the first failure")
 		list      = flag.Bool("list", false, "print matching test names (and tags) and exit")
 		stopPanic = flag.Bool("stop-on-panic", false, "treat a test panic as fatal to the entire run")
+		seed      = flag.Int64("seed", framework.DefaultSeed, "default --seed value injected into every `crossfuzz run` invocation. Pass 0 for wall-clock (non-deterministic).")
 	)
 	flag.Var(&tagFlag, "tag", "only run tests carrying this tag (repeatable). Combined with -run by AND.")
 	flag.Usage = func() {
@@ -37,6 +38,7 @@ func main() {
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+	framework.DefaultSeed = *seed
 
 	tests := framework.Tests()
 	var re *regexp.Regexp

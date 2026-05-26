@@ -5,9 +5,16 @@ import (
 	"context"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
+
+// DefaultSeed is the --seed value injected into every `crossfuzz run`
+// invocation made through this framework, unless the caller passes their own
+// --seed. Defaults to 1 so cross-run comparisons in tests are reproducible;
+// the e2e binary's --seed flag overrides it.
+var DefaultSeed int64 = 1
 
 // RunResult is the captured outcome of one bin/crossfuzz invocation.
 type RunResult struct {
@@ -61,7 +68,7 @@ func runSubcommand(t *T, ws *Workspace, sub string, args []string, wall time.Dur
 	// cross-run comparisons aren't polluted by mutator divergence. A test that
 	// actually wants the wall-clock default can pass --seed 0 explicitly.
 	if sub == "run" && !hasFlag(args, "--seed") {
-		args = append([]string{"--seed", "1"}, args...)
+		args = append([]string{"--seed", strconv.FormatInt(DefaultSeed, 10)}, args...)
 	}
 
 	all := append([]string{sub, ws.ConfigPath}, args...)
