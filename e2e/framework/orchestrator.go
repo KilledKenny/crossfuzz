@@ -18,6 +18,7 @@ const (
 	Failed
 	Skipped
 	Panicked // panic that wasn't a fatalSignal / skipSignal
+	Flaky    // failed initially but passed on a retry (--flaky N)
 )
 
 func (o Outcome) String() string {
@@ -30,6 +31,8 @@ func (o Outcome) String() string {
 		return "skip"
 	case Panicked:
 		return "PANIC"
+	case Flaky:
+		return "FLAKY"
 	default:
 		return "?"
 	}
@@ -47,12 +50,17 @@ type Result struct {
 // Runner orchestrates execution of a slice of tests.
 type Runner struct {
 	Tests       []Test
-	Parallel    int           // max concurrent tests; 1 = strictly serial
-	Verbose     bool          // stream per-test logs as they finish
-	FailFast    bool          // stop dispatching after the first failure
-	StopOnPanic bool          // treat panic as fatal to the whole run
-	Out         io.Writer     // progress + summary output
-	NowFunc     func() time.Time
+	Parallel    int  // max concurrent tests; 1 = strictly serial
+	Verbose     bool // stream per-test logs as they finish
+	FailFast    bool // stop dispatching after the first failure
+	StopOnPanic bool // treat panic as fatal to the whole run
+	// Flaky, if > 0, rerun each failed/panicked test up to this many extra
+	// times after the first pass. A test that passes any retry is reported
+	// as Flaky (not Failed) so the user knows to investigate it as
+	// instability rather than a real regression.
+	Flaky   int
+	Out     io.Writer // progress + summary output
+	NowFunc func() time.Time
 }
 
 // Run executes every test in r.Tests, returning the results in the order they
@@ -128,10 +136,48 @@ func (r *Runner) Run() []Result {
 	}
 
 	wg.Wait()
+
+	if r.Flaky > 0 {
+		r.retryFlaky(results)
+	}
+
 	r.printSummary(results, r.NowFunc().Sub(startAll))
 
 	_ = anyFailed
 	return results
+}
+
+// retryFlaky reruns each Failed/Panicked test up to r.Flaky additional times
+// (sequentially, to keep output legible). Each retry bumps the framework
+// DefaultSeed by +1 so the mutator explores a different input sequence —
+// otherwise a retry with the same seed would be byte-for-byte identical and
+// reveal nothing new. A test that passes any retry is rewritten in-place to
+// Outcome=Flaky with a reason explaining what happened. Tests that fail every
+// retry stay Failed/Panicked.
+func (r *Runner) retryFlaky(results []Result) {
+	baseSeed := DefaultSeed
+	defer func() { DefaultSeed = baseSeed }()
+
+	for i := range results {
+		o := results[i].Outcome
+		if o != Failed && o != Panicked {
+			continue
+		}
+		origReason := results[i].Reason
+		origOutcome := o
+		for attempt := 1; attempt <= r.Flaky; attempt++ {
+			DefaultSeed = baseSeed + int64(attempt)
+			retry := r.runOne(results[i].Test)
+			fmt.Fprintf(r.Out, "[retry %d/%d seed=%d] %-40s %s (%s)\n", attempt, r.Flaky, DefaultSeed, retry.Test.Name, retry.Outcome, retry.Duration.Truncate(10*time.Millisecond))
+			if retry.Outcome == Passed {
+				results[i].Outcome = Flaky
+				results[i].Reason = fmt.Sprintf("initially %s on attempt 1 (seed=%d), passed on attempt %d/%d (seed=%d). Initial failure:\n%s", origOutcome, baseSeed, attempt+1, r.Flaky+1, DefaultSeed, origReason)
+				results[i].Duration += retry.Duration
+				break
+			}
+			results[i].Duration += retry.Duration
+		}
+	}
 }
 
 func (r *Runner) runOne(t Test) Result {
@@ -195,9 +241,10 @@ func (r *Runner) printLine(n, total int, res Result) {
 
 func (r *Runner) printSummary(results []Result, total time.Duration) {
 	sort.SliceStable(results, func(i, j int) bool { return results[i].Test.Name < results[j].Test.Name })
-	var pass, fail, skip, panicked int
+	var pass, fail, skip, panicked, flaky int
 	var failed []Result
 	var skipped []Result
+	var flakyList []Result
 	for _, r := range results {
 		switch r.Outcome {
 		case Passed:
@@ -211,6 +258,9 @@ func (r *Runner) printSummary(results []Result, total time.Duration) {
 		case Panicked:
 			panicked++
 			failed = append(failed, r)
+		case Flaky:
+			flaky++
+			flakyList = append(flakyList, r)
 		}
 	}
 
@@ -221,6 +271,9 @@ func (r *Runner) printSummary(results []Result, total time.Duration) {
 	fmt.Fprintf(r.Out, "  failed:    %d\n", fail)
 	if panicked > 0 {
 		fmt.Fprintf(r.Out, "  panicked:  %d\n", panicked)
+	}
+	if flaky > 0 {
+		fmt.Fprintf(r.Out, "  flaky:     %d\n", flaky)
 	}
 	fmt.Fprintf(r.Out, "  skipped:   %d\n", skip)
 	fmt.Fprintf(r.Out, "  duration:  %s\n", total.Truncate(10*time.Millisecond))
@@ -239,6 +292,14 @@ func (r *Runner) printSummary(results []Result, total time.Duration) {
 					fmt.Fprintf(r.Out, "      %s\n", l)
 				}
 			}
+		}
+	}
+
+	if len(flakyList) > 0 {
+		fmt.Fprintln(r.Out)
+		fmt.Fprintln(r.Out, "flaky (failed initially but passed on retry — please investigate):")
+		for _, f := range flakyList {
+			fmt.Fprintf(r.Out, "  %s: %s\n", f.Test.Name, firstLine(f.Reason))
 		}
 	}
 

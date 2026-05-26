@@ -31,6 +31,7 @@ func main() {
 		list      = flag.Bool("list", false, "print matching test names (and tags) and exit")
 		stopPanic = flag.Bool("stop-on-panic", false, "treat a test panic as fatal to the entire run")
 		seed      = flag.Int64("seed", framework.DefaultSeed, "default --seed value injected into every `crossfuzz run` invocation. Pass 0 for wall-clock (non-deterministic).")
+		flaky     = flag.Int("flaky", 3, "after the first pass, rerun each failed test up to N times (incrementing the seed each retry); any test that passes a retry is reported as flaky, not failed. Pass 0 to disable.")
 	)
 	flag.Var(&tagFlag, "tag", "only run tests carrying this tag (repeatable). Combined with -run by AND.")
 	flag.Usage = func() {
@@ -93,6 +94,7 @@ func main() {
 		Verbose:     *verbose,
 		FailFast:    *failFast,
 		StopOnPanic: *stopPanic,
+		Flaky:       *flaky,
 		Out:         os.Stdout,
 	}
 	fmt.Fprintf(os.Stdout, "running %d tests with up to %d in parallel\n\n", len(filtered), *parallel)
