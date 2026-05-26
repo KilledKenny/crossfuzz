@@ -148,9 +148,11 @@ func runCoverageStability(t *framework.T, lc langCase) {
 		}
 		// Fixed exec budget per run makes the cross-run coverage comparison
 		// deterministic: both runs execute the same number of mutations from
-		// the same seeds (the mutator is reseeded per process so coverage
-		// may still drift slightly via the per-language harness's own
-		// scheduling, hence the ±2 tolerance further below).
+		// the same seeds (the framework injects --seed 1 by default for all
+		// e2e `run` invocations). Any remaining drift comes from per-process
+		// scheduling/GC noise that the Go harness's warmup noiseMask is
+		// supposed to absorb — that's the regression signal this test exists
+		// to catch.
 		res := framework.RunWithTimeout(t, ws, 45*time.Second,
 			"--timeout", "5s",
 			"--warmup", "30",
@@ -168,7 +170,14 @@ func runCoverageStability(t *framework.T, lc langCase) {
 
 	cov1 := runOnce()
 	cov2 := runOnce()
-	const tolerance = 2
+	// With a fixed mutator seed, languages without GC-driven coverage noise
+	// should be bit-stable. Go is the only harness with a runtime that the
+	// noiseMask is meant to absorb, so it gets a small tolerance — that
+	// tolerance is the signal channel for noiseMask regressions.
+	tolerance := 0
+	if lc.Tag == "go" {
+		tolerance = 2
+	}
 	if diff := abs(cov1 - cov2); diff > tolerance {
 		t.Errorf("post-warmup coverage flaked across runs: %d vs %d (diff %d > tolerance %d) — warmup may be broken", cov1, cov2, diff, tolerance)
 	}

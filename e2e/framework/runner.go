@@ -5,6 +5,7 @@ import (
 	"context"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -56,6 +57,13 @@ func runSubcommand(t *T, ws *Workspace, sub string, args []string, wall time.Dur
 	ctx, cancel := context.WithTimeout(context.Background(), wall)
 	defer cancel()
 
+	// All e2e `run` invocations get a deterministic mutator seed by default so
+	// cross-run comparisons aren't polluted by mutator divergence. A test that
+	// actually wants the wall-clock default can pass --seed 0 explicitly.
+	if sub == "run" && !hasFlag(args, "--seed") {
+		args = append([]string{"--seed", "1"}, args...)
+	}
+
 	all := append([]string{sub, ws.ConfigPath}, args...)
 	cmd := exec.CommandContext(ctx, bin, all...)
 	cmd.Dir = ws.Dir
@@ -82,4 +90,13 @@ func runSubcommand(t *T, ws *Workspace, sub string, args []string, wall time.Dur
 	}
 	res.Stats, res.Ticks = ParseOutput(res.Stdout)
 	return res
+}
+
+func hasFlag(args []string, name string) bool {
+	for _, a := range args {
+		if a == name || strings.HasPrefix(a, name+"=") {
+			return true
+		}
+	}
+	return false
 }

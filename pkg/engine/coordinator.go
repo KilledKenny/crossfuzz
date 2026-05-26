@@ -84,6 +84,11 @@ type Coordinator struct {
 	// stopAfterDuration wall-clocks the entire campaign on top of any
 	// configured [campaign].timeout. Zero means no extra cap.
 	stopAfterDuration time.Duration
+
+	// seed is the base value used to derive every worker's mutator and rng
+	// seeds. Defaults to wall-clock time; SetSeed overrides it for
+	// reproducible runs (tests, bug repros).
+	seed int64
 }
 
 // NewCoordinator creates a coordinator for the given config and worker sets.
@@ -120,6 +125,7 @@ func NewCoordinator(cfg *config.Config, workerSets []WorkerRunners) (*Coordinato
 		globalCov:    make([]byte, coverage.BitmapSize),
 		perTargetCov: make(map[string][]byte),
 		findingCovs:  make(map[[32]byte]bool),
+		seed:         seed,
 	}, nil
 }
 
@@ -172,6 +178,18 @@ func (c *Coordinator) SetDebugEdge(enabled bool) {
 func (c *Coordinator) SetStopAfter(execsPerWorker int, duration time.Duration) {
 	c.stopAfterExecs = execsPerWorker
 	c.stopAfterDuration = duration
+}
+
+// SetSeed overrides the base seed used to derive each worker's mutator and
+// rng. Intended for tests and bug reproduction; in normal use the wall-clock
+// default chosen in NewCoordinator should stand.
+func (c *Coordinator) SetSeed(seed int64) {
+	c.seed = seed
+	dict := c.workers[0].mutator.dict
+	for i := range c.workers {
+		c.workers[i].mutator = NewMutator(seed+int64(i), c.cfg.Campaign.MaxInputSize, dict)
+		c.workers[i].rng = rand.New(rand.NewSource(seed + int64(i) + 1))
+	}
 }
 
 // validateStability runs input through all runners n times and checks whether
@@ -274,6 +292,7 @@ func (c *Coordinator) Run(ctx context.Context) error {
 		c.cfg.Campaign.Name, numWorkers,
 		len(c.workers[0].runners), len(c.workers[0].serverRunners),
 		c.corpus.Len())
+	fmt.Printf("Seed: %d\n", c.seed)
 
 	if c.warmupRounds > 0 {
 		if err := c.Warmup(ctx, c.warmupRounds); err != nil {

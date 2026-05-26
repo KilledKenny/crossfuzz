@@ -108,6 +108,7 @@ func runCmd() *cobra.Command {
 		logFile     string
 		workers     int
 		stopAfter   string
+		seed        int64
 	)
 
 	cmd := &cobra.Command{
@@ -129,7 +130,7 @@ func runCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cmdRun(cfg, warmup, validate, maxFindings, debugEdge, memLimit, workers, build, logFile, stopExecs, stopDur)
+			cmdRun(cfg, warmup, validate, maxFindings, debugEdge, memLimit, workers, build, logFile, stopExecs, stopDur, seed)
 			return nil
 		},
 	}
@@ -144,6 +145,7 @@ func runCmd() *cobra.Command {
 	cmd.Flags().StringVar(&logFile, "log-file", "", "Also write all stdout output to this file")
 	cmd.Flags().IntVar(&workers, "workers", 1, "Number of parallel fuzzing workers, each with their own target processes")
 	cmd.Flags().StringVar(&stopAfter, "stop-after", "", "Stop after N executions per worker (integer) or after a duration (e.g. 30s, 2m). Per-worker counter for integer mode — total is N*workers.")
+	cmd.Flags().Int64Var(&seed, "seed", 0, "Deterministic seed for the mutator (0 = wall-clock). Intended for tests and bug reproduction.")
 
 	return cmd
 }
@@ -490,7 +492,7 @@ func parseStopAfter(s string) (int, time.Duration, error) {
 	return 0, d, nil
 }
 
-func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debugEdge bool, memLimit uint64, numWorkers int, build bool, logFile string, stopAfterExecs int, stopAfterDuration time.Duration) {
+func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debugEdge bool, memLimit uint64, numWorkers int, build bool, logFile string, stopAfterExecs int, stopAfterDuration time.Duration, seed int64) {
 	if numWorkers < 1 {
 		fmt.Fprintf(os.Stderr, "--workers must be at least 1\n")
 		os.Exit(1)
@@ -565,6 +567,9 @@ func cmdRun(cfg *config.Config, warmup int, validate int, maxFindings int, debug
 	coord.SetMaxFindings(maxFindings)
 	coord.SetDebugEdge(debugEdge)
 	coord.SetStopAfter(stopAfterExecs, stopAfterDuration)
+	if seed != 0 {
+		coord.SetSeed(seed)
+	}
 	if err := coord.Run(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "Campaign error: %v\n", err)
 		os.Exit(1)
