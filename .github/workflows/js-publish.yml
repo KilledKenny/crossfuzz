@@ -1,14 +1,11 @@
 # Publishes the `@crossfuzz/crossfuzz` npm package.
 #
 # Triggers:
-#   - push to main touching harness/js/**  → `npm publish --dry-run` (validation only;
-#                                             npm has no TestPyPI equivalent)
+#   - push to main touching harness/js/**  → `npm publish --dry-run`
 #   - push of tag matching js-v*           → real publish to npmjs.com
+#   - manual workflow_dispatch             → real publish (TEMPORARY: remove
+#                                            once tag-based flow is verified)
 #
-# Auth: npm Trusted Publishing (OIDC). One-time setup required at
-# https://www.npmjs.com/settings/~/access (Trusted Publishers section) —
-# match repository KilledKenny/crossfuzz, workflow js-publish.yml,
-# environment npm.
 
 name: Publish crossfuzz (JS)
 
@@ -20,6 +17,7 @@ on:
       - '.github/workflows/js-publish.yml'
     tags:
       - 'js-v*'
+  workflow_dispatch:
 
 defaults:
   run:
@@ -29,12 +27,13 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
 
       - name: Assert tag matches package.json version (tag push only)
         if: startsWith(github.ref, 'refs/tags/js-v')
@@ -52,20 +51,21 @@ jobs:
 
   publish:
     needs: validate
-    if: startsWith(github.ref, 'refs/tags/js-v')
+    if: startsWith(github.ref, 'refs/tags/js-v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: npm
     permissions:
       id-token: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
+          package-manager-cache: false
 
-      - name: Publish to npm with provenance
+      - name: Publish to npm
         working-directory: harness/js
-        run: npm publish --provenance --access public
+        run: npm publish --access public
