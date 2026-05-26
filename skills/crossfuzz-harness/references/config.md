@@ -10,6 +10,7 @@ name = "my_diff"          # Campaign name shown in output (required)
 timeout = "30m"           # Total campaign duration; e.g. "30m", "1h", "2h30m"
 exec_timeout = "500ms"    # Per-execution timeout; target killed & restarted on expiry
 max_input_size = 4096     # Maximum input size in bytes. Optional; defaults to 4096 if omitted. Hard cap is 1 MB (the input region size).
+warmup_rounds = 10        # Run the corpus N times through worker 0 before the main loop to stabilise flaky coverage edges. Optional; defaults to 0.
 ```
 
 `timeout` and `exec_timeout` accept Go duration strings: `ms`, `s`, `m`, `h`.

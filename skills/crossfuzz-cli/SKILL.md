@@ -50,6 +50,7 @@ For the complete annotated schema and real examples, see the **crossfuzz-harness
 name = "my_diff"
 timeout = "30m"
 exec_timeout = "500ms"
+warmup_rounds = 10
 
 [corpus]
 seed_dir = "./seeds"

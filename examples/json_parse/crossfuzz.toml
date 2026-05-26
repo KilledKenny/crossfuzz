@@ -3,6 +3,7 @@ name = "json_parse_diff"
 timeout = "30m"
 exec_timeout = "1000ms"
 max_input_size = 4096
+warmup_rounds = 10
 
 [corpus]
 seed_dir = "./seeds"

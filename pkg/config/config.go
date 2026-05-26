@@ -40,6 +40,9 @@ type CampaignConfig struct {
 	// Dicts is an optional inline list of dictionary tokens, applied in
 	// addition to DictFile and any comparator-derived defaults.
 	Dicts []string `toml:"dicts"`
+	// WarmupRounds runs the full corpus through worker 0 this many times
+	// before the main fuzzing loop, stabilising flaky coverage edges.
+	WarmupRounds int `toml:"warmup_rounds"`
 }
 
 // CorpusConfig specifies corpus directories.

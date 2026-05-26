@@ -126,11 +126,14 @@ func runCmd() *cobra.Command {
 			if cmd.Flags().Changed("findings") || cfg.Corpus.FindingsDir == "" {
 				cfg.Corpus.FindingsDir = findings
 			}
+			if cmd.Flags().Changed("warmup") {
+				cfg.Campaign.WarmupRounds = warmup
+			}
 			stopExecs, stopDur, err := parseStopAfter(stopAfter)
 			if err != nil {
 				return err
 			}
-			cmdRun(cfg, warmup, validate, maxFindings, debugEdge, memLimit, workers, build, logFile, stopExecs, stopDur, seed)
+			cmdRun(cfg, cfg.Campaign.WarmupRounds, validate, maxFindings, debugEdge, memLimit, workers, build, logFile, stopExecs, stopDur, seed)
 			return nil
 		},
 	}
