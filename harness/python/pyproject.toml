@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "crossfuzz"
+version = "0.0.1"
+description = "Python harness for the cross_fuzz differential fuzzer"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Simon Rawet", email = "Simon@rawet.se" },
+]
+keywords = ["fuzzing", "differential-fuzzing", "coverage", "security", "testing"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: Software Development :: Testing",
+]
+dependencies = [
+    "coverage>=7.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/KilledKenny/cross_fuzz"
+Source = "https://github.com/KilledKenny/cross_fuzz"
+Issues = "https://github.com/KilledKenny/cross_fuzz/issues"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["crossfuzz.py"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "crossfuzz.py",
+    "README.md",
+    "LICENSE",
+    "pyproject.toml",
+]

@@ -2,3 +2,7 @@ __pycache__
 .venv
 
 .deps_installed
+
+dist/
+build/
+*.egg-info/
