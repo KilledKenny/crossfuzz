@@ -2,7 +2,7 @@
 
 ## Harness file
 
-`harness/python/crossfuzz.py` — add the harness directory to `sys.path` in your target script, then import it.
+`harness/python/crossfuzz.py` — published to PyPI as `crossfuzz`. Install with `pip install crossfuzz`, then `import crossfuzz`.
 
 ## Dependency
 
@@ -22,8 +22,6 @@ harness/python/.venv/bin/pip install -r harness/python/requirements.txt
 ## Fuzz target
 
 ```python
-import os, sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../harness/python'))
 import crossfuzz
 
 def my_target(data: bytes) -> bytes:
@@ -76,8 +74,6 @@ When `accepted` is `False` the coordinator discards the input. When `True`:
 **Validity filter:**
 
 ```python
-import os, sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../harness/python'))
 import crossfuzz
 
 def only_utf8(data: bytes):
@@ -93,8 +89,7 @@ crossfuzz.filter(only_utf8)
 **Transform filter (normalise JSON):**
 
 ```python
-import json, os, sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../harness/python'))
+import json
 import crossfuzz
 
 def normalise(data: bytes):
@@ -118,8 +113,6 @@ def compare(target, settings=None)
 Return `''` if all outputs agree, or a non-empty mismatch description.
 
 ```python
-import os, sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../harness/python'))
 import crossfuzz
 
 def check(input_bytes, names, outputs):

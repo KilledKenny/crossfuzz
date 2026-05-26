@@ -5,8 +5,6 @@ the target function; the harness manages shared memory, pipes, and coverage.
 
 Usage::
 
-    import sys, os
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../harness/python'))
     import crossfuzz
 
     def my_target(data: bytes) -> bytes:
