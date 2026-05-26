@@ -2,6 +2,10 @@
   "name": "@crossfuzz/crossfuzz",
   "version": "0.0.3",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KilledKenny/crossfuzz.git"
+  },
   "exports": {
     ".": "./crossfuzz.ts",
     "./instrument.ts": "./instrument.ts"
