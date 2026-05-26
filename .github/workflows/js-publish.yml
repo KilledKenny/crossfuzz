@@ -1,0 +1,71 @@
+# Publishes the `@crossfuzz/crossfuzz` npm package.
+#
+# Triggers:
+#   - push to main touching harness/js/**  → `npm publish --dry-run` (validation only;
+#                                             npm has no TestPyPI equivalent)
+#   - push of tag matching js-v*           → real publish to npmjs.com
+#
+# Auth: npm Trusted Publishing (OIDC). One-time setup required at
+# https://www.npmjs.com/settings/~/access (Trusted Publishers section) —
+# match repository KilledKenny/crossfuzz, workflow js-publish.yml,
+# environment npm.
+
+name: Publish crossfuzz (JS)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'harness/js/**'
+      - '.github/workflows/js-publish.yml'
+    tags:
+      - 'js-v*'
+
+defaults:
+  run:
+    working-directory: harness/js
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Assert tag matches package.json version (tag push only)
+        if: startsWith(github.ref, 'refs/tags/js-v')
+        run: |
+          tag_version="${GITHUB_REF#refs/tags/js-v}"
+          file_version=$(node -p "require('./package.json').version")
+          if [ "$tag_version" != "$file_version" ]; then
+            echo "::error::tag js-v${tag_version} does not match package.json version ${file_version}"
+            exit 1
+          fi
+          echo "version ok: ${file_version}"
+
+      - name: npm publish --dry-run
+        run: npm publish --dry-run --access public
+
+  publish:
+    needs: validate
+    if: startsWith(github.ref, 'refs/tags/js-v')
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Publish to npm with provenance
+        working-directory: harness/js
+        run: npm publish --provenance --access public
