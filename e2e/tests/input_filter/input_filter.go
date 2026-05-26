@@ -32,12 +32,12 @@ func testNoFilterBaseline(t *framework.T) {
 	ws := framework.NewWorkspace(t, "input_filter")
 	ws.RenderConfig(t, map[string]any{
 		"UseFilter":       false,
-		"CampaignTimeout": "5s",
+		"CampaignTimeout": "30s",
 	})
 	if r := framework.Build(t, ws); r.ExitCode != 0 {
 		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
 	}
-	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999")
+	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999", "--stop-after", "200")
 	if res.ExitCode != 0 {
 		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
 	}
@@ -55,12 +55,14 @@ func testRejectAll(t *framework.T) {
 		"UseFilter":       true,
 		"FilterDir":       "reject",
 		"Transform":       false,
-		"CampaignTimeout": "5s",
+		"CampaignTimeout": "30s",
 	})
 	if r := framework.Build(t, ws); r.ExitCode != 0 {
 		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
 	}
-	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999")
+	// reject filter discards every input, so --stop-after=<N> (an exec
+	// counter) would never trip. Use the duration form instead.
+	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999", "--stop-after", "2s")
 	if res.ExitCode != 0 {
 		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
 	}
@@ -84,12 +86,12 @@ func testTransform(t *framework.T) {
 		"UseFilter":       true,
 		"FilterDir":       "transform",
 		"Transform":       true,
-		"CampaignTimeout": "5s",
+		"CampaignTimeout": "30s",
 	})
 	if r := framework.Build(t, ws); r.ExitCode != 0 {
 		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
 	}
-	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999")
+	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999", "--stop-after", "200")
 	if res.ExitCode != 0 {
 		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
 	}
@@ -108,12 +110,12 @@ func testNoFilterBaselineParallel(t *framework.T) {
 	ws := framework.NewWorkspace(t, "input_filter")
 	ws.RenderConfig(t, map[string]any{
 		"UseFilter":       false,
-		"CampaignTimeout": "5s",
+		"CampaignTimeout": "30s",
 	})
 	if r := framework.Build(t, ws); r.ExitCode != 0 {
 		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
 	}
-	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999", "--workers", "4")
+	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999", "--workers", "4", "--stop-after", "200")
 	if res.ExitCode != 0 {
 		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
 	}
@@ -131,12 +133,13 @@ func testRejectAllParallel(t *framework.T) {
 		"UseFilter":       true,
 		"FilterDir":       "reject",
 		"Transform":       false,
-		"CampaignTimeout": "5s",
+		"CampaignTimeout": "30s",
 	})
 	if r := framework.Build(t, ws); r.ExitCode != 0 {
 		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
 	}
-	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999", "--workers", "4")
+	// See testRejectAll: exec-count --stop-after never trips with reject-all.
+	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999", "--workers", "4", "--stop-after", "2s")
 	if res.ExitCode != 0 {
 		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
 	}
@@ -160,12 +163,12 @@ func testTransformParallel(t *framework.T) {
 		"UseFilter":       true,
 		"FilterDir":       "transform",
 		"Transform":       true,
-		"CampaignTimeout": "5s",
+		"CampaignTimeout": "30s",
 	})
 	if r := framework.Build(t, ws); r.ExitCode != 0 {
 		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
 	}
-	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999", "--workers", "4")
+	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999", "--workers", "4", "--stop-after", "200")
 	if res.ExitCode != 0 {
 		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
 	}

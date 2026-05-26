@@ -47,13 +47,13 @@ func testCorpusIsReloaded(t *framework.T) {
 	ws.RenderConfig(t, map[string]any{
 		"Go":              true,
 		"ExecTimeout":     "500ms",
-		"CampaignTimeout": "8s",
+		"CampaignTimeout": "30s",
 	})
 	if r := framework.Build(t, ws); r.ExitCode != 0 {
 		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
 	}
 
-	first := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999")
+	first := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999", "--stop-after", "10s")
 	if first.ExitCode != 0 {
 		t.Fatalf("first run failed: %s\n%s", first.Stdout, first.Stderr)
 	}
@@ -66,7 +66,7 @@ func testCorpusIsReloaded(t *framework.T) {
 	firstCoverage := first.Ticks[len(first.Ticks)-1].Coverage
 	firstCorpus := first.Stats.Corpus
 
-	second := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999")
+	second := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999", "--stop-after", "100")
 	if second.ExitCode != 0 {
 		t.Fatalf("second run failed: %s\n%s", second.Stdout, second.Stderr)
 	}
@@ -104,13 +104,13 @@ func testCorpusIsReloadedParallel(t *framework.T) {
 	ws.RenderConfig(t, map[string]any{
 		"Go":              true,
 		"ExecTimeout":     "500ms",
-		"CampaignTimeout": "8s",
+		"CampaignTimeout": "30s",
 	})
 	if r := framework.Build(t, ws); r.ExitCode != 0 {
 		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
 	}
 
-	first := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999", "--workers", "4")
+	first := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999", "--workers", "4", "--stop-after", "10s")
 	if first.ExitCode != 0 {
 		t.Fatalf("first run failed: %s\n%s", first.Stdout, first.Stderr)
 	}
@@ -119,7 +119,7 @@ func testCorpusIsReloadedParallel(t *framework.T) {
 	}
 	firstCorpus := first.Stats.Corpus
 
-	second := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999", "--workers", "4")
+	second := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999", "--workers", "4", "--stop-after", "100")
 	if second.ExitCode != 0 {
 		t.Fatalf("second run failed: %s\n%s", second.Stdout, second.Stderr)
 	}

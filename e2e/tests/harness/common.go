@@ -89,7 +89,7 @@ func runPathDiscoveryAndAgreement(t *framework.T, lc langCase, workers int) {
 	ws := framework.NewWorkspace(t, "byte_echo")
 	lc.renderWith(t, ws, map[string]any{
 		"ExecTimeout":     "1s",
-		"CampaignTimeout": "8s",
+		"CampaignTimeout": "30s",
 	})
 	if r := framework.Build(t, ws); r.ExitCode != 0 {
 		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
@@ -99,7 +99,10 @@ func runPathDiscoveryAndAgreement(t *framework.T, lc langCase, workers int) {
 		t.Fatal("fixture must ship with at least one seed")
 	}
 
-	args := []string{"--timeout", "5s", "--max-findings", "9999"}
+	// Per-worker exec cap keeps the test fast and deterministic. 500 execs is
+	// well above the threshold required to grow byte_echo's corpus beyond the
+	// seed count via mutation, on every language we ship a harness for.
+	args := []string{"--timeout", "5s", "--max-findings", "9999", "--stop-after", "500"}
 	if workers > 1 {
 		args = append(args, "--workers", strconv.Itoa(workers))
 	}
@@ -138,15 +141,21 @@ func runCoverageStability(t *framework.T, lc langCase) {
 		ws := framework.NewWorkspace(t, "byte_echo")
 		lc.renderWith(t, ws, map[string]any{
 			"ExecTimeout":     "1s",
-			"CampaignTimeout": "8s",
+			"CampaignTimeout": "30s",
 		})
 		if r := framework.Build(t, ws); r.ExitCode != 0 {
 			t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
 		}
+		// Fixed exec budget per run makes the cross-run coverage comparison
+		// deterministic: both runs execute the same number of mutations from
+		// the same seeds (the mutator is reseeded per process so coverage
+		// may still drift slightly via the per-language harness's own
+		// scheduling, hence the ±2 tolerance further below).
 		res := framework.RunWithTimeout(t, ws, 45*time.Second,
 			"--timeout", "5s",
 			"--warmup", "30",
 			"--max-findings", "9999",
+			"--stop-after", "300",
 		)
 		if res.ExitCode != 0 {
 			t.Fatalf("run failed (exit %d)\nstderr:\n%s", res.ExitCode, res.Stderr)

@@ -344,6 +344,12 @@ func (c *Coordinator) runWorker(ctx context.Context, cancel context.CancelFunc, 
 			return nil
 		default:
 		}
+		// --stop-after <N>: every continue path (dedup hit, filter reject,
+		// finding-cov dedup) bypasses any check at the bottom of the loop,
+		// so the cap is enforced at the top before each new iteration.
+		if c.stopAfterExecs > 0 && execsThisWorker >= c.stopAfterExecs {
+			return nil
+		}
 
 		// Generate input: pick a base via the power schedule, mostly mutate,
 		// occasionally splice. spliceRate ramps up once the worker has not
@@ -528,13 +534,6 @@ func (c *Coordinator) runWorker(ctx context.Context, cancel context.CancelFunc, 
 
 		c.stats.Update(c.corpus.Len(), covBits, findingsSnapshot, targetEdges)
 		c.stats.PrintIfDue()
-
-		// --stop-after <N>: this worker has hit its per-worker exec cap.
-		// Return now that the current iteration's coverage merge, finding
-		// save, and stats update have all completed.
-		if c.stopAfterExecs > 0 && execsThisWorker >= c.stopAfterExecs {
-			return nil
-		}
 	}
 }
 

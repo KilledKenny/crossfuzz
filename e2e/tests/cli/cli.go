@@ -30,6 +30,10 @@ func init() {
 	r("Validate", nil, testValidate)
 	r("MaxMemory_CrashesTargetOnOverflow", nil, testMaxMemory)
 	r("RootBuildFlag", nil, testRootBuildFlag)
+	r("StopAfter_Execs", nil, testStopAfterExecs)
+	r("StopAfter_Execs_Parallel", []string{"parallel"}, testStopAfterExecsParallel)
+	r("StopAfter_Duration", nil, testStopAfterDuration)
+	r("StopAfter_InvalidArg", nil, testStopAfterInvalid)
 }
 
 // buildGoByteEcho is the shared "fast Go-only build" used by most CLI flag
@@ -248,6 +252,77 @@ func testMaxMemory(t *framework.T) {
 	}
 	if res.Stats.Crashes == 0 {
 		t.Errorf("expected >=1 crash from memhog under --max-memory=128M; got 0\nstdout:\n%s", res.Stdout)
+	}
+}
+
+func testStopAfterExecs(t *framework.T) {
+	framework.RequireCrossfuzzBinary(t)
+	framework.RequireGo(t)
+
+	// With --stop-after=50 and a single worker, total execs should land at
+	// roughly 50 (some tolerance for already-in-flight iterations and the
+	// fact that the cap is checked after the iteration's full bookkeeping).
+	ws := buildGoByteEcho(t, map[string]any{"CampaignTimeout": "60s"})
+	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--stop-after", "50")
+	if res.ExitCode != 0 {
+		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
+	}
+	if res.Stats.Execs < 40 || res.Stats.Execs > 80 {
+		t.Errorf("expected execs ≈ 50 with --stop-after=50, got %d", res.Stats.Execs)
+	}
+}
+
+func testStopAfterExecsParallel(t *framework.T) {
+	framework.RequireCrossfuzzBinary(t)
+	framework.RequireGo(t)
+
+	// --stop-after is per-worker (no shared counter), so --workers=4
+	// --stop-after=25 should yield about 4×25 = 100 execs total.
+	ws := buildGoByteEcho(t, map[string]any{"CampaignTimeout": "60s"})
+	res := framework.RunWithTimeout(t, ws, 30*time.Second,
+		"--workers", "4",
+		"--stop-after", "25",
+	)
+	if res.ExitCode != 0 {
+		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
+	}
+	// Expect 4*25=100 with some tolerance.
+	if res.Stats.Execs < 80 || res.Stats.Execs > 140 {
+		t.Errorf("expected execs ≈ 100 with --workers=4 --stop-after=25 (per-worker), got %d", res.Stats.Execs)
+	}
+}
+
+func testStopAfterDuration(t *framework.T) {
+	framework.RequireCrossfuzzBinary(t)
+	framework.RequireGo(t)
+
+	ws := buildGoByteEcho(t, map[string]any{"CampaignTimeout": "60s"})
+	start := time.Now()
+	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--stop-after", "2s")
+	elapsed := time.Since(start)
+	if res.ExitCode != 0 {
+		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
+	}
+	// Wall-clock should be close to 2s plus some startup + shutdown overhead.
+	if elapsed > 10*time.Second {
+		t.Errorf("expected --stop-after=2s to terminate quickly; took %s", elapsed)
+	}
+	if !res.Stats.Found {
+		t.Errorf("expected 'Campaign finished' line after --stop-after duration")
+	}
+}
+
+func testStopAfterInvalid(t *framework.T) {
+	framework.RequireCrossfuzzBinary(t)
+	framework.RequireGo(t)
+
+	ws := buildGoByteEcho(t, nil)
+	res := framework.RunWithTimeout(t, ws, 10*time.Second, "--stop-after", "garbage")
+	if res.ExitCode == 0 {
+		t.Errorf("expected non-zero exit for --stop-after=garbage, got 0")
+	}
+	if !strings.Contains(res.Stderr, "invalid --stop-after") {
+		t.Errorf("expected 'invalid --stop-after' in stderr, got:\n%s", res.Stderr)
 	}
 }
 

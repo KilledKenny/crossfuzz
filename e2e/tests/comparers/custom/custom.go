@@ -24,11 +24,11 @@ func testCaseInsensitive(t *framework.T) {
 	framework.RequireBinary(t, "python3")
 
 	ws := framework.NewWorkspace(t, "comparers/custom")
-	ws.RenderConfig(t, map[string]any{"CampaignTimeout": "8s"})
+	ws.RenderConfig(t, map[string]any{"CampaignTimeout": "30s"})
 	if r := framework.Build(t, ws); r.ExitCode != 0 {
 		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
 	}
-	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999")
+	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999", "--stop-after", "200")
 	if res.ExitCode != 0 {
 		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
 	}
@@ -43,11 +43,11 @@ func testCaseInsensitiveParallel(t *framework.T) {
 	framework.RequireBinary(t, "python3")
 
 	ws := framework.NewWorkspace(t, "comparers/custom")
-	ws.RenderConfig(t, map[string]any{"CampaignTimeout": "8s"})
+	ws.RenderConfig(t, map[string]any{"CampaignTimeout": "30s"})
 	if r := framework.Build(t, ws); r.ExitCode != 0 {
 		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
 	}
-	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999", "--workers", "4")
+	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999", "--workers", "4", "--stop-after", "200")
 	if res.ExitCode != 0 {
 		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
 	}

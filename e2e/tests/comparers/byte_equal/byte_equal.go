@@ -25,13 +25,13 @@ func testAgree(t *framework.T) {
 
 	ws := framework.NewWorkspace(t, "comparers/byte_equal")
 	ws.RenderConfig(t, map[string]any{
-		"CampaignTimeout": "5s",
+		"CampaignTimeout": "30s",
 		"Diverge":         false,
 	})
 	if r := framework.Build(t, ws); r.ExitCode != 0 {
 		t.Fatalf("build failed: %s\n%s", r.Stdout, r.Stderr)
 	}
-	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999")
+	res := framework.RunWithTimeout(t, ws, 30*time.Second, "--max-findings", "9999", "--stop-after", "200")
 	if res.ExitCode != 0 {
 		t.Fatalf("run failed: %s\n%s", res.Stdout, res.Stderr)
 	}
