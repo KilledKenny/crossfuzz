@@ -47,17 +47,21 @@ env       = ["FOO=bar"]      # Extra environment variables
 
 ### Language-specific patterns
 
-**C**
+**C** (CMake — recommended; requires the crossfuzz harness installed system-wide, see `c-install.md`)
 ```toml
-binary = "./c_target"
-build_cmd = "clang -fsanitize-coverage=trace-pc-guard -O2 -I ../../harness/c -o c_target c_target.c ../../harness/c/crossfuzz.c"
+binary = "./build/c_target"
+build_cmd = "cmake -B build -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Release && cmake --build build"
 ```
 
-**C++**
+The target's `CMakeLists.txt` calls `find_package(crossfuzz REQUIRED)` and links `crossfuzz::c`. See `c.md` for the full pattern (pkg-config also supported).
+
+**C++** (CMake)
 ```toml
-binary = "./cpp_target"
-build_cmd = "clang -fsanitize-coverage=trace-pc-guard -O2 -c ../../harness/c/crossfuzz.c -o crossfuzz_c.o && clang++ -std=c++23 -fsanitize-coverage=trace-pc-guard -O2 -I ../../harness/c -o cpp_target cpp_target.cpp ../../harness/cpp/crossfuzz.cpp crossfuzz_c.o && rm crossfuzz_c.o"
+binary = "./build/cpp_target"
+build_cmd = "cmake -B build -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Release && cmake --build build"
 ```
+
+Link `crossfuzz::cpp` in the target's `CMakeLists.txt`. See `c.md`.
 
 **Go**
 ```toml
@@ -65,13 +69,21 @@ binary = "./go_target_bin"
 build_cmd = "cd go_target && PKGS=$(go list -deps . | grep -vE '^(runtime$|runtime/.*|sync$|sync/.*|internal/.*|reflect$|syscall$|os$|os/.*)' | paste -sd,) && go build -cover -covermode=atomic -coverpkg=\"$PKGS\" -o ../go_target_bin ."
 ```
 
-**Java**
+**Java** (Maven — harness pulled from Maven Central as `io.killedkenny.crossfuzz:crossfuzz`)
 ```toml
 binary = "java"
-args   = ["-javaagent:../../harness/java/build/libs/crossfuzz.jar",
-          "-cp", "../../harness/java/build/libs/crossfuzz.jar:.", "MyTarget"]
-build_cmd = "cd ../../harness/java && gradle jar && cd - && javac -cp ../../harness/java/build/libs/crossfuzz.jar MyTarget.java"
+args   = ["-javaagent:crossfuzz.jar", "-cp", "crossfuzz.jar:target/classes", "MyTarget"]
+build_cmd = "mvn compile"
 ```
+
+**Java** (Gradle)
+```toml
+binary = "java"
+args   = ["-javaagent:crossfuzz.jar", "-cp", "crossfuzz.jar:build/classes/java/main", "MyTarget"]
+build_cmd = "gradle downloadAgent compileJava"
+```
+
+See `java.md` for the `pom.xml` / `build.gradle` snippets that copy `crossfuzz.jar` into the project root.
 
 **JavaScript / TypeScript (Bun)**
 ```toml
@@ -175,8 +187,8 @@ findings_dir = "./findings"
 [[target]]
 name = "c_base64"
 language = "c"
-binary = "./c_target"
-build_cmd = "clang -fsanitize-coverage=trace-pc-guard -O2 -I ../../harness/c -o c_target c_target.c ../../harness/c/crossfuzz.c"
+binary = "./c/build/c_target"
+build_cmd = "cmake -B c/build -S c -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Release && cmake --build c/build"
 
 [[target]]
 name = "go_base64"
@@ -219,9 +231,8 @@ build_cmd = "cd go_target && PKGS=$(go list -deps . | grep -vE '^(runtime$|runti
 name = "java_url"
 language = "java"
 binary = "java"
-args = ["-javaagent:../../harness/java/build/libs/crossfuzz.jar",
-        "-cp", "../../harness/java/build/libs/crossfuzz.jar:.", "JavaTarget"]
-build_cmd = "cd ../../harness/java && gradle jar && cd - && javac -cp ../../harness/java/build/libs/crossfuzz.jar JavaTarget.java"
+args = ["-javaagent:crossfuzz.jar", "-cp", "crossfuzz.jar:target/classes", "JavaTarget"]
+build_cmd = "mvn compile"
 
 [comparator]
 type = "byte_equal"

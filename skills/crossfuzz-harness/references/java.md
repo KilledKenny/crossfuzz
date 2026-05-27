@@ -223,6 +223,5 @@ If you need coverage from JDK-delegating code (e.g. `java.util.Base64`), impleme
 ## Common pitfalls
 
 - **Missing `-javaagent`**: binary runs but produces no coverage.
-- **`/proc/self/fd/3` and `/proc/self/fd/4`**: the Java harness uses these to open pipes; requires Linux.
 - **Classpath order**: `crossfuzz.jar` must appear before your target classes in `-cp` for the agent to instrument them.
 - **Java version**: requires JDK 11+.

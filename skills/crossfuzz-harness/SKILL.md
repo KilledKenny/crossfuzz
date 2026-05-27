@@ -7,6 +7,8 @@ description: Use this skill when the user wants to add a new target to a crossfu
 
 A **harness** is a thin library that handles the IPC between the crossfuzz coordinator and your target process. You write the target function; the harness handles everything else.
 
+> Linux-only. The coordinator and all harnesses rely on `/dev/shm` for shared memory and inherited fds 3/4 (some harnesses go through `/proc/self/fd/`).
+
 ## What a harness does
 
 1. Opens the shared memory region pointed to by `CROSSFUZZ_SHM` env var

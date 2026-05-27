@@ -2,7 +2,7 @@
 
 ## Package path
 
-Import as `crossfuzz "crossfuzz/harness/go"` in your target's `main` package.
+Import as `crossfuzz "github.com/KilledKenny/crossfuzz/harness/go"` in your target's `main` package.
 
 ## Fuzz target
 
@@ -11,7 +11,7 @@ package main
 
 import (
     "encoding/base64"
-    crossfuzz "crossfuzz/harness/go"
+    crossfuzz "github.com/KilledKenny/crossfuzz/harness/go"
 )
 
 func target(data []byte) ([]byte, error) {
@@ -83,7 +83,7 @@ crossfuzz.Fuzz(target, crossfuzz.Settings{
 ```go
 package main
 
-import crossfuzz "crossfuzz/harness/go"
+import crossfuzz "github.com/KilledKenny/crossfuzz/harness/go"
 
 func main() {
     crossfuzz.Filter(func(data []byte) ([]byte, bool) {
@@ -106,7 +106,7 @@ package main
 
 import (
     "fmt"
-    crossfuzz "crossfuzz/harness/go"
+    crossfuzz "github.com/KilledKenny/crossfuzz/harness/go"
 )
 
 func main() {
@@ -130,7 +130,7 @@ Configure in `crossfuzz.toml` as `[comparator] type = "harness"`.
 For `type = "server"` targets (long-running HTTP server):
 
 ```go
-import crossfuzz "crossfuzz/harness/go"
+import crossfuzz "github.com/KilledKenny/crossfuzz/harness/go"
 
 func main() {
     if err := crossfuzz.InitServer(); err != nil {

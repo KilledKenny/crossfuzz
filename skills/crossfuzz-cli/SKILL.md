@@ -111,7 +111,10 @@ Each finding is saved as a raw binary file in `findings_dir/`. Run `analyze` to 
 
 ```
 --build               Build before running
---workers=N           Parallel workers, each with their own target processes (default 1)
+--workers=N           Parallel workers, each with their own target processes (default 1).
+                      Recommended: do not exceed `nproc` — each worker spawns a full copy of
+                      every target, so memory scales linearly and oversubscribing CPUs hurts
+                      throughput.
 --max-findings=N      Stop after N findings (default 10)
 --timeout=DURATION    Per-execution timeout, e.g. 500ms, 5s (default 5s)
 --max-memory=SIZE     Virtual memory limit per target, e.g. 512M, 1G

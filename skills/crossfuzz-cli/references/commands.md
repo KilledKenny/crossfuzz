@@ -38,7 +38,7 @@ crossfuzz run crossfuzz.toml [flags]
 |------|---------|-------------|
 | `--build` | false | Build all targets before starting |
 | `--name=t1,t2` | all | Restrict to these targets |
-| `--workers=N` | 1 | Parallel workers; each worker starts its own copy of all target processes |
+| `--workers=N` | 1 | Parallel workers; each worker starts its own copy of all target processes. Do not exceed `nproc` — each worker is a full set of target processes, so memory scales linearly and oversubscribing CPUs hurts throughput. |
 | `--max-findings=N` | 10 | Stop after this many unique findings |
 | `--timeout=DURATION` | 5s | Per-execution timeout; target is killed and restarted on expiry (e.g. `500ms`, `5s`) |
 | `--max-memory=SIZE` | 0 (none) | Virtual memory limit per target process (e.g. `512M`, `1G`) |

@@ -1,12 +1,18 @@
 # Python Harness
 
-## Harness file
+The Python harness is published to PyPI as `crossfuzz`. Coverage uses branch arcs collected by the `coverage` library via `sys.settrace`.
 
-`harness/python/crossfuzz.py` — published to PyPI as `crossfuzz`. Install with `pip install crossfuzz`, then `import crossfuzz`.
+## Setup
 
-## Dependency
+```bash
+pip install crossfuzz
+```
 
-A venv with the `coverage` library lives at `harness/python/.venv/`. Use its interpreter directly — no activation needed:
+Installs the harness module (and pulls in `coverage` as a dependency). Import in your target with `import crossfuzz`.
+
+## Local venv (this repo)
+
+A venv with the harness pre-installed lives at `harness/python/.venv/`. Use its interpreter directly — no activation needed:
 
 ```bash
 harness/python/.venv/bin/python3 my_target.py
