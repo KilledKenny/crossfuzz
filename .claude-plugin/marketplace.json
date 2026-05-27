@@ -8,9 +8,11 @@
   "plugins": [
     {
       "name": "crossfuzz-skills",
-      "source": "./skills",
+      "source": {
+        "source": "github",
+        "repo": "KilledKenny/crossfuzz"
+      },
       "description": "Skills for the crossfuzz CLI and harness APIs",
-      "skills": ".",
       "strict": false
     }
   ]
