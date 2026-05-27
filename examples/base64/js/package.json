@@ -1,0 +1,8 @@
+{
+  "devDependencies": {
+    "@types/istanbul-lib-instrument": "^1.7.8"
+  },
+  "dependencies": {
+    "@crossfuzz/crossfuzz": "^0.0.2"
+  }
+}
