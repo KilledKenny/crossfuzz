@@ -38,6 +38,24 @@ make bin/crossfuzz     # just the coordinator
 make                   # coordinator + all bundled harnesses (Java jar, JS, Python, Rust)
 ```
 
+## AI assistant skills
+
+crossfuzz ships skills that teach your AI assistant the CLI and harness APIs for all supported languages.
+
+### Claude Code
+
+```
+/plugin marketplace add KilledKenny/crossfuzz
+/plugin install crossfuzz-skills@crossfuzz
+/reload-plugins
+```
+
+### Other tools (agent-skills-cli)
+
+```bash
+npx agent-skills-cli add KilledKenny/crossfuzz
+```
+
 ## Basic usage
 
 crossfuzz is driven by a TOML config that lists the targets to fuzz and how to compare their outputs. The three commands you will use most:
