@@ -1,3 +1,4 @@
 /crossfuzz
 /bin
 corpus-reduced
+.claude/settings.local.json
