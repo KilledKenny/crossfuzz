@@ -21,18 +21,17 @@ import org.objectweb.asm.tree.TryCatchBlockNode;
 
 public class CoverageTransformer implements ClassFileTransformer {
 
-    private static final String[] EXCLUDED = {
-        "io/killedkenny/crossfuzz/", "java/", "javax/", "sun/", "com/sun/",
-        "jdk/", "org/objectweb/asm/"
-    };
-
     @Override
     public byte[] transform(ClassLoader loader, String className,
             Class<?> classBeingRedefined, ProtectionDomain pd, byte[] buf) {
         if (className == null) return null;
-        for (String p : EXCLUDED) {
-            if (className.startsWith(p)) return null;
-        }
+        // Bootstrap-loaded classes (java.*, javax.*, sun.*, jdk.*, etc.):
+        // CoverageRuntime.hit() uses ByteBuffer internally — instrumenting those
+        // same classes would recurse infinitely.
+        if (loader == null) return null;
+        // Never instrument the harness runtime or its ASM dependency.
+        if (className.startsWith("io/killedkenny/crossfuzz/")) return null;
+        if (className.startsWith("org/objectweb/asm/")) return null;
         try {
             ClassReader cr = new ClassReader(buf);
             ClassNode cn = new ClassNode();

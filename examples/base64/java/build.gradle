@@ -8,6 +8,8 @@ configurations {
 
 dependencies {
     crossfuzzAgent('io.killedkenny.crossfuzz:crossfuzz:0.0.1') { transitive = false }
+    // Use for local testing
+    // crossfuzzAgent(files('../../../harness/java/build/libs/crossfuzz.jar'))
 }
 
 sourceSets {

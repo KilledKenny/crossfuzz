@@ -1,0 +1,20 @@
+[campaign]
+name = "java_lib_coverage"
+timeout = "{{or .CampaignTimeout "30m"}}"
+exec_timeout = "{{or .ExecTimeout "1s"}}"
+max_input_size = 256
+
+[corpus]
+seed_dir = "./seeds"
+corpus_dir = "./corpus"
+findings_dir = "./findings"
+
+[[target]]
+name = "java_json"
+language = "java"
+binary = "java"
+args = ["-javaagent:{{.RepoRoot}}/harness/java/build/libs/crossfuzz.jar", "-cp", "{{.RepoRoot}}/harness/java/build/libs/crossfuzz.jar:java/build/classes/java/main:java/build/dependency-jars/*", "JavaJsonTarget"]
+build_cmd = "gradle -p java -PcrossfuzzJar={{.RepoRoot}}/harness/java/build/libs/crossfuzz.jar compileJava"
+
+[comparator]
+type = "none"

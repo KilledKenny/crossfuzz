@@ -212,6 +212,14 @@ binary = "java"
 args = ["-javaagent:crossfuzz.jar", "-cp", "crossfuzz.jar:target/classes", "MyServer"]
 ```
 
+## Coverage scope
+
+The javaagent instruments all classes loaded by the **application classloader** — this includes your target code and any third-party libraries (Guava, Jackson, Apache Commons, etc.). No extra configuration is needed.
+
+**JDK classes** (`java.*`, `javax.*`, `sun.*`, `jdk.*`) are loaded by the bootstrap classloader and are intentionally excluded. The coverage runtime itself uses `ByteBuffer` internally; instrumenting those same classes would cause infinite recursion. This is the same limitation accepted by Jazzer and JQF.
+
+If you need coverage from JDK-delegating code (e.g. `java.util.Base64`), implement the logic yourself. The `examples/base64` Java target shows this pattern: a hand-rolled base64 encoder instead of delegating to `java.util.Base64`.
+
 ## Common pitfalls
 
 - **Missing `-javaagent`**: binary runs but produces no coverage.
