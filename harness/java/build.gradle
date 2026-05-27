@@ -5,7 +5,7 @@ plugins {
 }
 
 group = 'io.killedkenny.crossfuzz'
-version = project.findProperty('projectVersion') ?: '0.0.1'
+version = project.findProperty('projectVersion') ?: '0.0.2'
 
 def isSnapshot = version.endsWith('-SNAPSHOT')
 
