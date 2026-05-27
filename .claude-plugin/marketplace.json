@@ -12,8 +12,7 @@
         "source": "github",
         "repo": "KilledKenny/crossfuzz"
       },
-      "description": "Skills for the crossfuzz CLI and harness APIs",
-      "strict": false
+      "description": "Skills for the crossfuzz CLI and harness APIs"
     }
   ]
 }
