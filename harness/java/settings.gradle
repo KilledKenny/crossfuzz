@@ -1,1 +1,11 @@
+plugins {
+     id 'com.gradleup.nmcp.settings' version '1.4.4'
+}
 rootProject.name = 'crossfuzz'
+nmcpSettings {
+    centralPortal {
+        username = mavenCentralUsername
+        password = mavenCentralPassword
+        publishingType = 'USER_MANAGED' // 'AUTOMATIC' // or 'USER_MANAGED' (usefull for testing)
+    }
+}
