@@ -1,0 +1,4 @@
+crossfuzz-*.jar
+crossfuzz.jar
+JavaTarget.class
+target/

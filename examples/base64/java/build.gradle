@@ -1,0 +1,23 @@
+plugins { id 'java' }
+repositories { mavenCentral() }
+
+configurations {
+    crossfuzzAgent
+    compileOnly.extendsFrom(crossfuzzAgent)
+}
+
+dependencies {
+    crossfuzzAgent('io.killedkenny.crossfuzz:crossfuzz:0.0.1') { transitive = false }
+}
+
+sourceSets {
+    main { java { srcDirs = ['.'] } }
+}
+
+tasks.register('downloadAgent', Copy) {
+    from configurations.crossfuzzAgent
+    into '.'
+    rename '.*', 'crossfuzz.jar'
+}
+
+compileJava.dependsOn downloadAgent

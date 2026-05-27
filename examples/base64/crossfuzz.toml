@@ -54,5 +54,12 @@ language = "rust"
 binary = "./rust/target/release/rust_base64"
 build_cmd = "cd rust && cargo rustc --release -- -C passes=sancov-module -C llvm-args=-sanitizer-coverage-level=3 -C llvm-args=-sanitizer-coverage-trace-pc-guard"
 
+[[target]]
+name = "java_base64"
+language = "java"
+binary = "java"
+args = ["-javaagent:java/crossfuzz.jar", "-cp", "java/crossfuzz.jar:java/build/classes/java/main", "JavaTarget"]
+build_cmd = "gradle -p java compileJava"
+
 [comparator]
 type = "byte_equal"

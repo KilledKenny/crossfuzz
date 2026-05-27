@@ -26,8 +26,8 @@ build_cmd = "cd go && PKGS=$(go list -deps . | grep -vE '^(runtime$|runtime/.*|s
 name = "java_json"
 language = "java"
 binary = "java"
-args = ["-javaagent:../../harness/java/build/libs/crossfuzz.jar", "-cp", "../../harness/java/build/libs/crossfuzz.jar:./java", "JavaTarget"]
-build_cmd = "cd ../../harness/java && gradle jar && cd - && cd java && javac -cp ../../../harness/java/build/libs/crossfuzz.jar JavaTarget.java"
+args = ["-javaagent:java/crossfuzz.jar", "-cp", "java/crossfuzz.jar:java/target/classes", "JavaTarget"]
+build_cmd = "mvn -f java/pom.xml compile"
 
 [[target]]
 name = "ts_json"
