@@ -10,7 +10,7 @@
     <dependency>
       <groupId>io.killedkenny.crossfuzz</groupId>
       <artifactId>crossfuzz</artifactId>
-      <version>0.0.1</version>
+      <version>0.0.2</version>
     </dependency>
   </dependencies>
 
