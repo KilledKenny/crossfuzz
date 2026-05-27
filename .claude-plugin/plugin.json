@@ -1,4 +1,5 @@
 {
   "name": "crossfuzz-skills",
-  "description": "Skills for the crossfuzz CLI and harness APIs"
+  "description": "Skills for the crossfuzz CLI and harness APIs",
+  "skills": ["./skills"]
 }
