@@ -1,0 +1,10 @@
+prefix=@CMAKE_INSTALL_PREFIX@
+libdir=@CMAKE_INSTALL_FULL_LIBDIR@
+includedir=@CMAKE_INSTALL_FULL_INCLUDEDIR@
+
+Name: crossfuzz-cpp
+Description: crossfuzz C++ fuzzing harness
+Version: @PROJECT_VERSION@
+Requires: crossfuzz-c
+Libs: -L${libdir} -lcrossfuzz_cpp -lcrossfuzz_c
+Cflags: -I${includedir}/crossfuzz -fsanitize-coverage=trace-pc-guard

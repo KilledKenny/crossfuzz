@@ -13,14 +13,14 @@ findings_dir = "./findings"
 [[target]]
 name = "c_base64"
 language = "c"
-binary = "./c/c_target"
-build_cmd = "cd c && clang-19 -fsanitize-coverage=trace-pc-guard -O2 -I ../../../harness/c -o c_target c_target.c ../../../harness/c/crossfuzz.c && patchelf --set-interpreter $(patchelf --print-interpreter $(which ls)) c_target"
+binary = "./c/build/c_target"
+build_cmd = "cmake -B c/build -S c -DCMAKE_BUILD_TYPE=Release -Dcrossfuzz_DIR=../../../harness/build/lib/cmake/crossfuzz && cmake --build c/build"
 
 [[target]]
 name = "cpp_base64"
 language = "cpp"
-binary = "./cpp/cpp_target"
-build_cmd = "cd cpp && clang-19 -fsanitize-coverage=trace-pc-guard -O2 -c ../../../harness/c/crossfuzz.c -o crossfuzz_c.o && clang++-19 -std=c++23 -fsanitize-coverage=trace-pc-guard -O2 -I ../../../harness/c -o cpp_target cpp_target.cpp ../../../harness/cpp/crossfuzz.cpp crossfuzz_c.o && rm crossfuzz_c.o && NIX_INTERP=$(patchelf --print-interpreter $(which ls)) && NIX_STDCXX=$(dirname $(g++ -print-file-name=libstdc++.so.6)) && ORIG_RPATH=$(patchelf --print-rpath cpp_target | tr ':' '\\n' | grep -v '/lib/x86_64-linux-gnu' | paste -sd':') && patchelf --set-interpreter $NIX_INTERP --set-rpath $NIX_STDCXX:$ORIG_RPATH cpp_target"
+binary = "./cpp/build/cpp_target"
+build_cmd = "cmake -B cpp/build -S cpp -DCMAKE_BUILD_TYPE=Release -Dcrossfuzz_DIR=../../../harness/build/lib/cmake/crossfuzz && cmake --build cpp/build"
 
 [[target]]
 name = "go_base64"

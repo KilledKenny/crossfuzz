@@ -2,14 +2,14 @@
 
 ## Harness files
 
-- `harness/c/crossfuzz.h` — header (include this in your target)
-- `harness/c/crossfuzz.c` — implementation (compile alongside your target)
-- `harness/cpp/crossfuzz.hpp` — C++ wrapper (optional, adds lambda support)
+To verify crossfuzz is installed: `pkg-config --modversion crossfuzz-c`
+
+Not installed? See [c-install.md](c-install.md).
 
 ## C target
 
 ```c
-#include "crossfuzz.h"
+#include <crossfuzz/crossfuzz.h>
 #include <string.h>
 
 static int target(const uint8_t *data, size_t size,
@@ -45,7 +45,7 @@ typedef int (*crossfuzz_fuzz_fn)(
 Use `crossfuzz.hpp` for a lambda-friendly interface:
 
 ```cpp
-#include "../../harness/cpp/crossfuzz.hpp"
+#include <crossfuzz/crossfuzz.hpp>
 #include <span>
 #include <vector>
 
@@ -60,26 +60,43 @@ int main()
 
 ## Build commands
 
-### C
+### CMake (recommended)
 
-```bash
-clang -fsanitize-coverage=trace-pc-guard -O2 \
-  -I ../../harness/c \
-  -o my_target my_target.c ../../harness/c/crossfuzz.c
+```cmake
+find_package(crossfuzz REQUIRED)
+
+add_executable(my_target my_target.c)
+target_link_libraries(my_target PRIVATE crossfuzz::c)
 ```
 
-### C++ (two-step compile)
+```cmake
+find_package(crossfuzz REQUIRED)
 
-```bash
-clang -fsanitize-coverage=trace-pc-guard -O2 \
-  -c ../../harness/c/crossfuzz.c -o crossfuzz_c.o
-
-clang++ -std=c++23 -fsanitize-coverage=trace-pc-guard -O2 \
-  -I ../../harness/c \
-  -o my_target my_target.cpp ../../harness/cpp/crossfuzz.cpp crossfuzz_c.o
+add_executable(my_target my_target.cpp)
+target_link_libraries(my_target PRIVATE crossfuzz::cpp)
 ```
 
-`-fsanitize-coverage=trace-pc-guard` is **required** for coverage. Without it the binary runs but produces no coverage signal.
+Linking against `crossfuzz::c` / `crossfuzz::cpp` automatically propagates
+`-fsanitize-coverage=trace-pc-guard` to the target.
+
+```sh
+cmake -B build -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+```
+
+### pkg-config / manual
+
+```sh
+# C
+clang $(pkg-config --cflags crossfuzz-c) -o my_target my_target.c \
+  $(pkg-config --libs crossfuzz-c)
+
+# C++
+clang++ -std=c++23 $(pkg-config --cflags crossfuzz-cpp) -o my_target my_target.cpp \
+  $(pkg-config --libs crossfuzz-cpp)
+```
+
+`-fsanitize-coverage=trace-pc-guard` is **required** for coverage. Without it the binary runs but produces no coverage signal. Both cmake and pkg-config add it automatically.
 
 ## TOML config entry
 
@@ -88,15 +105,15 @@ clang++ -std=c++23 -fsanitize-coverage=trace-pc-guard -O2 \
 [[target]]
 name = "c_impl"
 language = "c"
-binary = "./c_target"
-build_cmd = "clang -fsanitize-coverage=trace-pc-guard -O2 -I ../../harness/c -o c_target c_target.c ../../harness/c/crossfuzz.c"
+binary = "./build/my_target"
+build_cmd = "cmake -B build -DCMAKE_C_COMPILER=clang -DCMAKE_BUILD_TYPE=Release && cmake --build build"
 
 # C++ target
 [[target]]
 name = "cpp_impl"
 language = "cpp"
-binary = "./cpp_target"
-build_cmd = "clang -fsanitize-coverage=trace-pc-guard -O2 -c ../../harness/c/crossfuzz.c -o crossfuzz_c.o && clang++ -std=c++23 -fsanitize-coverage=trace-pc-guard -O2 -I ../../harness/c -o cpp_target cpp_target.cpp ../../harness/cpp/crossfuzz.cpp crossfuzz_c.o && rm crossfuzz_c.o"
+binary = "./build/my_target"
+build_cmd = "cmake -B build -DCMAKE_CXX_COMPILER=clang++ -DCMAKE_BUILD_TYPE=Release && cmake --build build"
 ```
 
 ## Settings
@@ -104,6 +121,8 @@ build_cmd = "clang -fsanitize-coverage=trace-pc-guard -O2 -c ../../harness/c/cro
 Pass a `crossfuzz_settings_t` as the second argument; pass `NULL` for defaults.
 
 ```c
+#include <crossfuzz/crossfuzz.h>
+
 crossfuzz_settings_t s = crossfuzz_default_settings();
 s.instrument = 0;  // disable coverage (use when harness is a thin HTTP client)
 s.transform  = 1;  // filter mode: returned bytes replace the original input
@@ -126,7 +145,7 @@ return crossfuzz::fuzz(myLambda, settings);
 ## Filter target (C)
 
 ```c
-#include "crossfuzz.h"
+#include <crossfuzz/crossfuzz.h>
 #include <string.h>
 
 static int url_filter(const uint8_t *data, size_t size,
@@ -154,7 +173,7 @@ Configure in `crossfuzz.toml` as `[input_filter]` (not `[[target]]`).
 ## Compare target (C)
 
 ```c
-#include "crossfuzz.h"
+#include <crossfuzz/crossfuzz.h>
 #include <string.h>
 
 static const char *my_compare(const uint8_t *input, size_t input_size,
