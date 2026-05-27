@@ -1,0 +1,17 @@
+{
+  "name": "crossfuzz",
+  "owner": {
+    "name": "Simon Rawet",
+    "email": "Simon@rawet.se"
+  },
+  "description": "Claude Code skills for the crossfuzz differential fuzzer",
+  "plugins": [
+    {
+      "name": "crossfuzz-skills",
+      "source": "./skills",
+      "description": "Skills for the crossfuzz CLI and harness APIs",
+      "skills": ".",
+      "strict": false
+    }
+  ]
+}
