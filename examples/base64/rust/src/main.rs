@@ -35,5 +35,5 @@ fn encode_base64(data: &[u8]) -> Vec<u8> {
 }
 
 fn main() {
-    crossfuzz_harness::fuzz(|input| Ok(encode_base64(input)), Default::default());
+    crossfuzz::fuzz(|input| Ok(encode_base64(input)), Default::default());
 }

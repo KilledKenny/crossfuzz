@@ -8,4 +8,4 @@ name = "rust_base64"
 path = "src/main.rs"
 
 [dependencies]
-crossfuzz-harness = { path = "../../../harness/rust" }
+crossfuzz = { path = "../../../harness/rust" }

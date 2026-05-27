@@ -3,7 +3,7 @@
 version = 4
 
 [[package]]
-name = "crossfuzz-harness"
+name = "crossfuzz"
 version = "0.1.0"
 dependencies = [
  "libc",
@@ -50,7 +50,7 @@ dependencies = [
 name = "rust_base64"
 version = "0.1.0"
 dependencies = [
- "crossfuzz-harness",
+ "crossfuzz",
 ]
 
 [[package]]

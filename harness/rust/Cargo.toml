@@ -1,10 +1,16 @@
 [package]
-name = "crossfuzz-harness"
-version = "0.1.0"
+name = "crossfuzz"
+version = "0.0.1"
 edition = "2021"
+description = "Rust harness for the crossfuzz differential fuzzer — handles shared memory, pipe IPC, and SanitizerCoverage instrumentation"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/KilledKenny/crossfuzz"
+keywords = ["fuzzing", "differential-fuzzing", "harness", "coverage", "sanitizer"]
+categories = ["development-tools::testing"]
 
 [lib]
-name = "crossfuzz_harness"
+name = "crossfuzz"
 crate-type = ["rlib"]
 
 [dependencies]
