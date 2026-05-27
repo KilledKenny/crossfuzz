@@ -2,18 +2,18 @@
 
 ## Harness crate
 
-`harness/rust/` — add as a path dependency in your binary's `Cargo.toml`:
+Add to your binary's `Cargo.toml`:
 
 ```toml
 [dependencies]
-crossfuzz-harness = { path = "../../harness/rust" }
+crossfuzz = "0.0.1"
 ```
 
 ## Fuzz target
 
 ```rust
 fn main() {
-    crossfuzz_harness::fuzz(
+    crossfuzz::fuzz(
         |input| {
             // Return Err(...) on error — does not crash the process.
             Ok(input.to_vec())
@@ -95,7 +95,7 @@ Returns `(output_bytes, accepted)`. When `accepted` is `false` the coordinator d
 **Validity filter:**
 
 ```rust
-use crossfuzz_harness::{filter, Settings};
+use crossfuzz::{filter, Settings};
 
 fn main() {
     filter(
@@ -111,7 +111,7 @@ fn main() {
 **Transform filter (normalise JSON):**
 
 ```rust
-use crossfuzz_harness::{filter, Settings};
+use crossfuzz::{filter, Settings};
 
 fn main() {
     filter(
@@ -140,7 +140,7 @@ where
 Parameters: `(input, names, outputs)`. Return `""` if all outputs agree, or a non-empty mismatch description.
 
 ```rust
-use crossfuzz_harness::{compare, Settings};
+use crossfuzz::{compare, Settings};
 
 fn main() {
     compare(
@@ -165,8 +165,8 @@ Configure as `[comparator] type = "harness"`.
 Set `instrument: false` when the harness is a thin HTTP client and coverage comes from an instrumented server:
 
 ```rust
-crossfuzz_harness::fuzz(
+crossfuzz::fuzz(
     |input| { Ok(vec![]) },
-    crossfuzz_harness::Settings { instrument: false, ..Default::default() },
+    crossfuzz::Settings { instrument: false, ..Default::default() },
 );
 ```

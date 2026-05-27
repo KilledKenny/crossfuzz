@@ -11,5 +11,5 @@ fn echo(data: &[u8]) -> Vec<u8> {
 }
 
 fn main() {
-    crossfuzz_harness::fuzz(|input| Ok(echo(input)), Default::default());
+    crossfuzz::fuzz(|input| Ok(echo(input)), Default::default());
 }
