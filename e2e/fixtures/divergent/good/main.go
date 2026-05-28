@@ -1,6 +1,6 @@
 package main
 
-import "crossfuzz/harness/go"
+import "github.com/KilledKenny/crossfuzz/harness/go"
 
 func target(data []byte) ([]byte, error) {
 	out := make([]byte, len(data))

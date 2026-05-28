@@ -3,7 +3,7 @@ package numeric_relative
 import (
 	"time"
 
-	"crossfuzz/e2e/framework"
+	"github.com/KilledKenny/crossfuzz/e2e/framework"
 )
 
 func init() {

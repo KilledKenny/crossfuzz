@@ -1,6 +1,6 @@
 package harness
 
-import "crossfuzz/e2e/framework"
+import "github.com/KilledKenny/crossfuzz/e2e/framework"
 
 var jsCase = langCase{
 	Tag:        "js",

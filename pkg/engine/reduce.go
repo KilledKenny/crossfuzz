@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"crossfuzz/pkg/config"
-	"crossfuzz/pkg/coverage"
-	"crossfuzz/pkg/runner"
+	"github.com/KilledKenny/crossfuzz/pkg/config"
+	"github.com/KilledKenny/crossfuzz/pkg/coverage"
+	"github.com/KilledKenny/crossfuzz/pkg/runner"
 )
 
 // ReduceResult holds the output of a corpus reduction pass.

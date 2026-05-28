@@ -6,7 +6,7 @@ import (
 	"io"
 	"net/http"
 
-	"crossfuzz/harness/go"
+	"github.com/KilledKenny/crossfuzz/harness/go"
 )
 
 func echoHandler(w http.ResponseWriter, r *http.Request) {

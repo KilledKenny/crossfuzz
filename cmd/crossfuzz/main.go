@@ -16,10 +16,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"crossfuzz/pkg/compare"
-	"crossfuzz/pkg/config"
-	"crossfuzz/pkg/engine"
-	"crossfuzz/pkg/runner"
+	"github.com/KilledKenny/crossfuzz/pkg/compare"
+	"github.com/KilledKenny/crossfuzz/pkg/config"
+	"github.com/KilledKenny/crossfuzz/pkg/engine"
+	"github.com/KilledKenny/crossfuzz/pkg/runner"
 )
 
 // Persistent (root-level) flag values shared across all subcommands.

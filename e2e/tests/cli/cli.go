@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"crossfuzz/e2e/framework"
+	"github.com/KilledKenny/crossfuzz/e2e/framework"
 )
 
 // register all CLI flag tests. Each test focuses on one flag's wiring.

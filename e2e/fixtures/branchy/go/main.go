@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"crossfuzz/harness/go"
+	"github.com/KilledKenny/crossfuzz/harness/go"
 )
 
 // target has a deliberately broad branch surface: ~16 branches per byte plus

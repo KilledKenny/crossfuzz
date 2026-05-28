@@ -1,8 +1,8 @@
 package engine
 
 import (
-	"crossfuzz/pkg/compare"
-	"crossfuzz/pkg/runner"
+	"github.com/KilledKenny/crossfuzz/pkg/compare"
+	"github.com/KilledKenny/crossfuzz/pkg/runner"
 )
 
 // Minimize shrinks input to the smallest byte sequence that still triggers

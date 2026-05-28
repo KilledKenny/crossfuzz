@@ -1,6 +1,6 @@
 package main
 
-import "crossfuzz/harness/go"
+import "github.com/KilledKenny/crossfuzz/harness/go"
 
 // Identity echo. Used as both target_a and target_b; byte_equal always
 // agrees on identity outputs, so any finding would indicate a wiring bug.

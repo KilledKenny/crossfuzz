@@ -1,7 +1,7 @@
 package main
 
 import (
-	"crossfuzz/harness/go"
+	"github.com/KilledKenny/crossfuzz/harness/go"
 )
 
 // target echoes the input. The byte-category switch is there only so the

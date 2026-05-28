@@ -9,7 +9,7 @@ import (
 	"sync"
 	"syscall"
 
-	"crossfuzz/pkg/protocol"
+	"github.com/KilledKenny/crossfuzz/pkg/protocol"
 )
 
 // CompareProcess manages a persistent comparator harness process.

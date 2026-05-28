@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"strings"
 
-	"crossfuzz/harness/go"
+	"github.com/KilledKenny/crossfuzz/harness/go"
 )
 
 func exerciseCoverage() int {

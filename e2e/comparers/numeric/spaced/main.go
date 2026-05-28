@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"crossfuzz/harness/go"
+	"github.com/KilledKenny/crossfuzz/harness/go"
 )
 
 // Emits the byte-sum surrounded by whitespace. byte_equal would flag every

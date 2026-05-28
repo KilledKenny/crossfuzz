@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"regexp"
 
-	"crossfuzz/harness/go"
+	"github.com/KilledKenny/crossfuzz/harness/go"
 )
 
 var regUrl = regexp.MustCompile(`^[a-zA-Z]+://[a-zA-Z0-9]`)

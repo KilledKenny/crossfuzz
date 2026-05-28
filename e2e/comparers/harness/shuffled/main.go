@@ -1,6 +1,6 @@
 package main
 
-import "crossfuzz/harness/go"
+import "github.com/KilledKenny/crossfuzz/harness/go"
 
 // Returns the input bytes reversed — same length, very different content.
 // A byte_equal comparator would flag every non-palindrome. The harness

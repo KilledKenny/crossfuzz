@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/base64"
 
-	"crossfuzz/harness/go"
+	"github.com/KilledKenny/crossfuzz/harness/go"
 )
 
 func target(data []byte) ([]byte, error) {

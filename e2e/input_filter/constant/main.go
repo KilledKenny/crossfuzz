@@ -1,6 +1,6 @@
 package main
 
-import "crossfuzz/harness/go"
+import "github.com/KilledKenny/crossfuzz/harness/go"
 
 // Always returns the 8-byte constant "ZZZZZZZZ", regardless of input.
 // Combined with target_identity, this diverges from byte_equal on every

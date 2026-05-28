@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"crossfuzz/harness/go"
+	"github.com/KilledKenny/crossfuzz/harness/go"
 )
 
 // Emits the same JSON object as compact/ but with keys in order y, x and

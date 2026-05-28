@@ -1,4 +1,4 @@
-module crossfuzz
+module github.com/KilledKenny/crossfuzz
 
 go 1.25.0
 

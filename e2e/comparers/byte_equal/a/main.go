@@ -1,6 +1,6 @@
 package main
 
-import "crossfuzz/harness/go"
+import "github.com/KilledKenny/crossfuzz/harness/go"
 
 // Returns input bytes XOR'd with 0x42 — identical behaviour to b/.
 func target(data []byte) ([]byte, error) {

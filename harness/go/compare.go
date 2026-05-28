@@ -7,8 +7,8 @@ import (
 	"os"
 	"syscall"
 
-	"crossfuzz/pkg/coverage"
-	"crossfuzz/pkg/protocol"
+	"github.com/KilledKenny/crossfuzz/pkg/coverage"
+	"github.com/KilledKenny/crossfuzz/pkg/protocol"
 )
 
 // Compare enters the persistent-mode comparator loop. The target function

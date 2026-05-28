@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"testing"
 
-	"crossfuzz/pkg/compare"
-	"crossfuzz/pkg/runner"
+	"github.com/KilledKenny/crossfuzz/pkg/compare"
+	"github.com/KilledKenny/crossfuzz/pkg/runner"
 )
 
 // mockRunner is a test double for runner.Runner.

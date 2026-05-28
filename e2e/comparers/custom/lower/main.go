@@ -1,6 +1,6 @@
 package main
 
-import "crossfuzz/harness/go"
+import "github.com/KilledKenny/crossfuzz/harness/go"
 
 // Byte-level ASCII lower. See upper/main.go for why bytes.ToLower isn't safe.
 func target(data []byte) ([]byte, error) {

@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 
-	"crossfuzz/harness/go"
+	"github.com/KilledKenny/crossfuzz/harness/go"
 )
 
 // Transform filter: accepts every input but rewrites it to a fixed marker

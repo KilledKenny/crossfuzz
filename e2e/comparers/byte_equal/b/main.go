@@ -1,6 +1,6 @@
 package main
 
-import "crossfuzz/harness/go"
+import "github.com/KilledKenny/crossfuzz/harness/go"
 
 // Identical to a/ when .Diverge is false; flips the high bit on every byte
 // when .Diverge is true, producing byte_equal findings on every non-empty

@@ -120,7 +120,7 @@ package mycategory
 
 import (
     "time"
-    "crossfuzz/e2e/framework"
+    "github.com/KilledKenny/crossfuzz/e2e/framework"
 )
 
 func init() {
@@ -170,7 +170,7 @@ via the second argument to `RenderConfig`.
 Common template files:
 
 - `crossfuzz.toml.tmpl` — the campaign config.
-- `go.mod.tmpl` — for Go targets, supplies `replace crossfuzz => {{.RepoRoot}}`.
+- `go.mod.tmpl` — for Go targets, supplies `replace github.com/KilledKenny/crossfuzz => {{.RepoRoot}}`.
 - `Cargo.toml.tmpl` — same idea for Rust.
 - `echo.py.tmpl`, `echo.js.tmpl` — when the script itself needs the harness path.
 

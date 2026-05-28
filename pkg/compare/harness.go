@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"crossfuzz/pkg/runner"
+	"github.com/KilledKenny/crossfuzz/pkg/runner"
 )
 
 // Harness is a comparator backed by an external harness process.

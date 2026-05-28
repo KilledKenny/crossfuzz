@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"syscall"
 
-	"crossfuzz/pkg/coverage"
+	"github.com/KilledKenny/crossfuzz/pkg/coverage"
 )
 
 // ServerProcess manages a long-running server target that communicates only

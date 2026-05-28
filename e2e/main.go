@@ -17,8 +17,8 @@ import (
 	"regexp"
 	"runtime"
 
-	"crossfuzz/e2e/framework"
-	_ "crossfuzz/e2e/tests"
+	"github.com/KilledKenny/crossfuzz/e2e/framework"
+	_ "github.com/KilledKenny/crossfuzz/e2e/tests"
 )
 
 func main() {

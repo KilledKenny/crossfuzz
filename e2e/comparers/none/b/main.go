@@ -1,6 +1,6 @@
 package main
 
-import "crossfuzz/harness/go"
+import "github.com/KilledKenny/crossfuzz/harness/go"
 
 // Deliberately returns very different output from a/ — every byte flipped.
 // Under the "none" comparator the coordinator should never flag this as a

@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"crossfuzz/harness/go"
+	"github.com/KilledKenny/crossfuzz/harness/go"
 )
 
 // Same value as exact/ scaled by (1 + 1e-12). Relative diff is 1e-12, which

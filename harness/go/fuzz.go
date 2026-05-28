@@ -5,8 +5,8 @@ import (
 	"os"
 	rtcov "runtime/coverage"
 
-	"crossfuzz/pkg/coverage"
-	"crossfuzz/pkg/protocol"
+	"github.com/KilledKenny/crossfuzz/pkg/coverage"
+	"github.com/KilledKenny/crossfuzz/pkg/protocol"
 )
 
 // Fuzz enters the persistent-mode fuzzing loop. It reads inputs from shared

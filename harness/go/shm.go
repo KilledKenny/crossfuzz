@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"crossfuzz/pkg/coverage"
+	"github.com/KilledKenny/crossfuzz/pkg/coverage"
 )
 
 // OpenSHM opens and maps the shared memory region identified by the

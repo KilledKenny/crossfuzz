@@ -1,6 +1,6 @@
 package main
 
-import "crossfuzz/harness/go"
+import "github.com/KilledKenny/crossfuzz/harness/go"
 
 // Intentional bug: XORs with 0x55 for every byte except when the input length
 // is exactly 3, where it XORs with 0x54. The fuzzer must discover the

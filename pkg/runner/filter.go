@@ -8,8 +8,8 @@ import (
 	"sync"
 	"syscall"
 
-	"crossfuzz/pkg/coverage"
-	"crossfuzz/pkg/protocol"
+	"github.com/KilledKenny/crossfuzz/pkg/coverage"
+	"github.com/KilledKenny/crossfuzz/pkg/protocol"
 )
 
 // FilterProcess manages a persistent input filter process.

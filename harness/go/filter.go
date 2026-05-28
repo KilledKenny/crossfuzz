@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"crossfuzz/pkg/protocol"
+	"github.com/KilledKenny/crossfuzz/pkg/protocol"
 )
 
 // Filter enters the persistent-mode filter loop. The target function receives

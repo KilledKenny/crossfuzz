@@ -3,7 +3,7 @@ package main
 import (
 	"time"
 
-	"crossfuzz/harness/go"
+	"github.com/KilledKenny/crossfuzz/harness/go"
 )
 
 // target sleeps forever when the input begins with 'S', producing a timeout

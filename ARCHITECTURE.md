@@ -315,7 +315,7 @@ clang -fsanitize-coverage=trace-pc-guard -o target target.c harness/c/crossfuzz.
 ```go
 package main
 
-import "github.com/user/crossfuzz/harness/gofuzz"
+import "github.com/KilledKenny/crossfuzz/harness/go"
 
 func target(data []byte) ([]byte, error) {
     // process data, return result

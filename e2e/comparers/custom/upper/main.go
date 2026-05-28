@@ -1,6 +1,6 @@
 package main
 
-import "crossfuzz/harness/go"
+import "github.com/KilledKenny/crossfuzz/harness/go"
 
 // Byte-level ASCII upper. Non-ASCII bytes pass through unchanged so the
 // transformation is length-preserving and invertible by .lower() in the

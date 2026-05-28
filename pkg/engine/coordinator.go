@@ -15,10 +15,10 @@ import (
 	"sync"
 	"time"
 
-	"crossfuzz/pkg/compare"
-	"crossfuzz/pkg/config"
-	"crossfuzz/pkg/coverage"
-	"crossfuzz/pkg/runner"
+	"github.com/KilledKenny/crossfuzz/pkg/compare"
+	"github.com/KilledKenny/crossfuzz/pkg/config"
+	"github.com/KilledKenny/crossfuzz/pkg/coverage"
+	"github.com/KilledKenny/crossfuzz/pkg/runner"
 
 	"golang.org/x/time/rate"
 )

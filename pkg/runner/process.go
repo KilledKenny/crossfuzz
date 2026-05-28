@@ -9,8 +9,8 @@ import (
 	"time"
 	"unsafe"
 
-	"crossfuzz/pkg/coverage"
-	"crossfuzz/pkg/protocol"
+	"github.com/KilledKenny/crossfuzz/pkg/coverage"
+	"github.com/KilledKenny/crossfuzz/pkg/protocol"
 )
 
 // TimeoutError is returned by Execute when the target doesn't respond within the deadline.
