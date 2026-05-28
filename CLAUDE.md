@@ -96,3 +96,7 @@ TOML files with four sections: `[campaign]`, `[corpus]`, `[comparator]`, and one
 Target `language` values: `"c"`, `"cpp"`, `"go"`, `"java"`, `"js"`, `"python"`, `"rust"`. Target `type` values: `"harness"` (default, uses pipe protocol) or `"server"` (long-running process, no pipe).
 
 Comparator `type` values: `"byte_equal"`, `"json_structural"`, `"numeric"`, `"custom"` (requires `script`), `"none"`.
+
+#### Config resolution order
+
+For any setting that can be specified in more than one place, precedence is: **explicitly-passed CLI flag > config value > built-in default**. A CLI flag that mirrors a config field (e.g. `--timeout`/`exec_timeout`, `--warmup`/`warmup_rounds`, `--corpus`/`corpus_dir`, `--findings`/`findings_dir`) must only override the config when the user actually passed it — guard such overrides with `cmd.Flags().Changed(...)` rather than relying on the flag's default value, so a config value is never silently clobbered by an unset flag.

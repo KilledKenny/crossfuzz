@@ -107,6 +107,10 @@ Each finding is saved as a raw binary file in `findings_dir/`. Run `analyze` to 
 ./bin/crossfuzz analyze crossfuzz.toml --payload-path ./findings/
 ```
 
+## Flags vs. config
+
+When a CLI flag mirrors a config field, an **explicitly passed flag takes precedence** over the config value; if the flag is omitted, the config value is used. This applies to `--timeout` (`[campaign] exec_timeout`), `--warmup` (`warmup_rounds`), `--corpus` (`corpus_dir`), and `--findings` (`findings_dir`). So `exec_timeout` set in the TOML is respected unless you override it on the command line.
+
 ## Most-used flags
 
 ```
@@ -116,10 +120,15 @@ Each finding is saved as a raw binary file in `findings_dir/`. Run `analyze` to 
                       every target, so memory scales linearly and oversubscribing CPUs hurts
                       throughput.
 --max-findings=N      Stop after N findings (default 10)
---timeout=DURATION    Per-execution timeout, e.g. 500ms, 5s (default 5s)
+--stop-after=VALUE    Stop after N executions per worker (integer; total = N×workers) or after
+                      a duration, e.g. 30s, 2m
+--timeout=DURATION    Per-execution timeout override, e.g. 500ms, 5s; if unset uses config
+                      exec_timeout (default 1s)
 --max-memory=SIZE     Virtual memory limit per target, e.g. 512M, 1G
 --validate=N          Re-run each new input N times to confirm output stability
 --warmup=N            Run corpus N times before main loop
+--seed=N              Deterministic mutator seed (0 = wall-clock); for tests and bug reproduction
+--log-file=PATH       Also tee all stdout output to this file
 --name=t1,t2          Only run/build these named targets
 --corpus=DIR          Override corpus directory (default: corpus)
 --findings=DIR        Override findings directory (default: findings)

@@ -40,10 +40,13 @@ crossfuzz run crossfuzz.toml [flags]
 | `--name=t1,t2` | all | Restrict to these targets |
 | `--workers=N` | 1 | Parallel workers; each worker starts its own copy of all target processes. Do not exceed `nproc` — each worker is a full set of target processes, so memory scales linearly and oversubscribing CPUs hurts throughput. |
 | `--max-findings=N` | 10 | Stop after this many unique findings |
-| `--timeout=DURATION` | 5s | Per-execution timeout; target is killed and restarted on expiry (e.g. `500ms`, `5s`) |
+| `--stop-after=VALUE` | (none) | Stop after N executions per worker (bare integer; total = N×workers) or after a duration (e.g. `30s`, `2m`) |
+| `--timeout=DURATION` | config | Per-execution timeout; overrides `[campaign] exec_timeout` only when explicitly passed (config default 1s). Target is killed and restarted on expiry (e.g. `500ms`, `5s`) |
 | `--max-memory=SIZE` | 0 (none) | Virtual memory limit per target process (e.g. `512M`, `1G`) |
 | `--validate=N` | 0 | Re-execute each new corpus input N times; log inputs whose output differs across runs |
 | `--warmup=N` | 0 | Run the full corpus N times before the main fuzzing loop starts |
+| `--seed=N` | 0 | Deterministic mutator seed (0 = wall-clock); intended for tests and bug reproduction |
+| `--log-file=PATH` | (none) | Also tee all stdout output to this file |
 | `--corpus=DIR` | corpus | Directory for storing/loading corpus entries (overrides config `corpus_dir` if set) |
 | `--findings=DIR` | findings | Directory for saving findings (overrides config `findings_dir` if set) |
 | `--debug-edge` | false | Print per-target edge counts in the live status ticker |

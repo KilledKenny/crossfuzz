@@ -36,7 +36,7 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&flagName, "name", "", "Comma-separated list of target names to build/run (default: all)")
-	rootCmd.PersistentFlags().StringVar(&flagTimeout, "timeout", "5s", "Per-execution timeout; target is killed and restarted on expiry (e.g. 5s, 500ms)")
+	rootCmd.PersistentFlags().StringVar(&flagTimeout, "timeout", "", "Per-execution timeout override (e.g. 5s, 500ms); if unset, uses [campaign] exec_timeout (default 1s)")
 	rootCmd.PersistentFlags().StringVar(&flagMaxMemory, "max-memory", "0", "Virtual memory limit per target process (e.g. 512M, 1G); 0 = no limit")
 
 	rootCmd.AddCommand(buildCmd())
@@ -66,11 +66,15 @@ func loadConfig(cmd *cobra.Command, args []string) (*config.Config, uint64, erro
 		}
 	}
 
-	execTimeout, err := time.ParseDuration(flagTimeout)
-	if err != nil {
-		return nil, 0, fmt.Errorf("invalid --timeout %q: %w", flagTimeout, err)
+	// Only override the config's exec_timeout when --timeout was explicitly
+	// passed; otherwise the value from [campaign] exec_timeout wins.
+	if cmd.Flags().Changed("timeout") {
+		execTimeout, err := time.ParseDuration(flagTimeout)
+		if err != nil {
+			return nil, 0, fmt.Errorf("invalid --timeout %q: %w", flagTimeout, err)
+		}
+		cfg.Campaign.ExecTimeout.Duration = execTimeout
 	}
-	cfg.Campaign.ExecTimeout.Duration = execTimeout
 
 	memLimit, err := parseBytes(flagMaxMemory)
 	if err != nil {
