@@ -49,6 +49,19 @@ ALL_TARGET+= $(HARNESS_TARGET)
 .PHONY: harness
 harness: $(HARNESS_TARGET)
 
+HARNESS_BUILD_DIR ?= harness/build
+PREFIX            ?= /usr/local
+
+.PHONY: install-c-harnes
+install-c-harnes:
+	cmake -B $(HARNESS_BUILD_DIR) harness/
+	cmake --install $(HARNESS_BUILD_DIR) --prefix $(PREFIX)
+
+.PHONY: uninstall-c-harnes
+uninstall-c-harnes:
+	cmake --build $(HARNESS_BUILD_DIR) --target uninstall 2>/dev/null || \
+	  xargs rm -f < $(HARNESS_BUILD_DIR)/install_manifest.txt
+
 .DEFAULT_GOAL := all
 .PHONY: all
 all: $(ALL_TARGET)
