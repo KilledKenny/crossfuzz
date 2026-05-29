@@ -94,6 +94,15 @@ public class CoverageTransformer implements ClassFileTransformer {
     }
 
     private void instrumentMethod(String cls, MethodNode mn) {
+        // Abstract and native methods have no body. Inserting any instruction
+        // would give them a Code attribute, which JVMS §4.7.3 forbids — the JVM
+        // then rejects the class with ClassFormatError at defineClass time (after
+        // transform() has already returned, so the catch in transform() cannot
+        // recover from it). Skip these methods entirely.
+        if ((mn.access & (Opcodes.ACC_ABSTRACT | Opcodes.ACC_NATIVE)) != 0) {
+            return;
+        }
+
         // Collect branch target labels (basic block entries)
         Set<LabelNode> targets = new HashSet<>();
         for (AbstractInsnNode n : mn.instructions.toArray()) {

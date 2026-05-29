@@ -1,0 +1,20 @@
+[campaign]
+name = "java_abstract_methods"
+timeout = "{{or .CampaignTimeout "30m"}}"
+exec_timeout = "{{or .ExecTimeout "1s"}}"
+max_input_size = 256
+
+[corpus]
+seed_dir = "./seeds"
+corpus_dir = "./corpus"
+findings_dir = "./findings"
+
+[[target]]
+name = "java_abstract"
+language = "java"
+binary = "java"
+args = ["-javaagent:{{.RepoRoot}}/harness/java/build/libs/crossfuzz.jar", "-cp", "{{.RepoRoot}}/harness/java/build/libs/crossfuzz.jar:./java", "AbstractMethodsTarget"]
+build_cmd = "cd java && javac -cp {{.RepoRoot}}/harness/java/build/libs/crossfuzz.jar AbstractMethodsTarget.java"
+
+[comparator]
+type = "none"

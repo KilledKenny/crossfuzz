@@ -304,6 +304,7 @@ public class Crossfuzz {
                 byte[] output;
                 int status = STATUS_OK;
                 try {
+
                     output = target.fuzz(input);
                     if (output == null) output = new byte[0];
                 } catch (Exception e) {
