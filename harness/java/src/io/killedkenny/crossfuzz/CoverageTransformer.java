@@ -9,6 +9,8 @@ import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.FrameNode;
+import org.objectweb.asm.tree.LineNumberNode;
 import org.objectweb.asm.tree.InsnList;
 import org.objectweb.asm.tree.JumpInsnNode;
 import org.objectweb.asm.tree.LabelNode;
@@ -35,62 +37,24 @@ public class CoverageTransformer implements ClassFileTransformer {
         try {
             ClassReader cr = new ClassReader(buf);
             ClassNode cn = new ClassNode();
-            // SKIP_FRAMES: don't parse existing frames — leaves no FrameNodes in the tree
-            // so insertions after LabelNodes are always placed before the first real insn.
-            cr.accept(cn, ClassReader.SKIP_FRAMES);
+            // EXPAND_FRAMES: parse and expand all StackMapTable entries into
+            // FrameNodes in the instruction list. Combined with COMPUTE_MAXS
+            // below this avoids loading any classes during instrumentation
+            // (COMPUTE_FRAMES triggers getCommonSuperClass → Class.forName →
+            // re-entrant loadClass while the class is mid-definition → LinkageError).
+            cr.accept(cn, ClassReader.EXPAND_FRAMES);
             for (MethodNode mn : cn.methods) {
                 instrumentMethod(className, mn);
             }
-            // COMPUTE_FRAMES: recompute all stack map frames from scratch so the
-            // inserted hit() calls don't invalidate existing frames. Resolving the
-            // common superclass of two merged types must go through the *target's*
-            // class loader — ASM's default uses the ASM library's own loader, which
-            // cannot see application classes and would type merged frames as Object,
-            // producing a VerifyError when the JVM loads the instrumented class.
-            ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES) {
-                @Override
-                protected String getCommonSuperClass(String type1, String type2) {
-                    return commonSuperClass(type1, type2, loader);
-                }
-            };
+            // COMPUTE_MAXS: only recalculate max stack/locals. Our probes have
+            // zero net stack effect (LDC int + INVOKESTATIC void), so existing
+            // StackMapTable frames remain valid — no class loading required.
+            ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
             cn.accept(cw);
             return cw.toByteArray();
         } catch (Throwable t) {
             return null;
         }
-    }
-
-    /**
-     * Resolves the common superclass of two internal type names by loading them
-     * through the target application's class loader. Mirrors the algorithm of
-     * ASM's default {@code ClassWriter.getCommonSuperClass}, which otherwise
-     * resolves against the ASM library's own loader and cannot see application
-     * classes — yielding frames typed too loosely (Object) and a VerifyError
-     * when the JVM loads the instrumented class.
-     *
-     * <p>If a type cannot be resolved this throws; {@link #transform} catches it
-     * and skips instrumentation for the whole class, so the uninstrumented class
-     * still loads and runs — it only loses coverage.
-     */
-    private static String commonSuperClass(String type1, String type2,
-            ClassLoader loader) {
-        ClassLoader cl = (loader != null) ? loader : ClassLoader.getSystemClassLoader();
-        Class<?> c, d;
-        try {
-            c = Class.forName(type1.replace('/', '.'), false, cl);
-            d = Class.forName(type2.replace('/', '.'), false, cl);
-        } catch (ClassNotFoundException e) {
-            throw new RuntimeException(e);
-        }
-        if (c.isAssignableFrom(d)) return type1;
-        if (d.isAssignableFrom(c)) return type2;
-        if (c.isInterface() || d.isInterface()) {
-            return "java/lang/Object";
-        }
-        do {
-            c = c.getSuperclass();
-        } while (!c.isAssignableFrom(d));
-        return c.getName().replace('.', '/');
     }
 
     private void instrumentMethod(String cls, MethodNode mn) {
@@ -125,11 +89,24 @@ public class CoverageTransformer implements ClassFileTransformer {
         // Inject at method entry (before first instruction)
         mn.instructions.insert(makeHit(cls, mn.name, 0));
 
-        // Inject after each branch-target label
+        // Inject after each branch-target label (and any pseudo-nodes that follow it).
+        // With EXPAND_FRAMES, a label may be followed by a LineNumberNode, a FrameNode,
+        // or both in either order, before the first real instruction. The StackMapTable
+        // entry must remain at the label's effective bytecode offset, so the probe must
+        // come after all of these pseudo-nodes. (Exception handler labels compiled with
+        // debug info have LineNumberNode → FrameNode between the label and the handler
+        // body; checking only for FrameNode misses the LineNumberNode and shifts the
+        // frame past the probe, producing VerifyError: Expecting a stackmap frame at
+        // branch target N.)
         int blockId = 1;
         for (AbstractInsnNode n : mn.instructions.toArray()) {
             if (n instanceof LabelNode && targets.contains(n)) {
-                mn.instructions.insert(n, makeHit(cls, mn.name, blockId++));
+                AbstractInsnNode insertAfter = n;
+                while (insertAfter.getNext() instanceof FrameNode
+                        || insertAfter.getNext() instanceof LineNumberNode) {
+                    insertAfter = insertAfter.getNext();
+                }
+                mn.instructions.insert(insertAfter, makeHit(cls, mn.name, blockId++));
             }
         }
     }
