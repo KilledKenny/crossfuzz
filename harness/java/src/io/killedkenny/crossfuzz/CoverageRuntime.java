@@ -11,6 +11,7 @@ public class CoverageRuntime {
 
     /** Disables coverage collection by discarding the bitmap reference. */
     static void disable() {
+        System.err.println("[crossfuzz] CoverageRuntime.disable called — instrument=false, no coverage");
         bitmap = null;
     }
 

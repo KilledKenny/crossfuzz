@@ -1,16 +1,18 @@
 package io.killedkenny.crossfuzz;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.instrument.ClassFileTransformer;
 import java.security.ProtectionDomain;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.AbstractInsnNode;
 import org.objectweb.asm.tree.ClassNode;
-import org.objectweb.asm.tree.FrameNode;
-import org.objectweb.asm.tree.LineNumberNode;
 import org.objectweb.asm.tree.InsnList;
 import org.objectweb.asm.tree.JumpInsnNode;
 import org.objectweb.asm.tree.LabelNode;
@@ -23,36 +25,133 @@ import org.objectweb.asm.tree.TryCatchBlockNode;
 
 public class CoverageTransformer implements ClassFileTransformer {
 
+    // The system (application) class loader is where -javaagent jars are placed.
+    // Any loader that does not have this in its parent chain cannot find
+    // CoverageRuntime and must not be instrumented.
+    private static final ClassLoader SYS_LOADER = ClassLoader.getSystemClassLoader();
+
     @Override
     public byte[] transform(ClassLoader loader, String className,
             Class<?> classBeingRedefined, ProtectionDomain pd, byte[] buf) {
         if (className == null) return null;
-        // Bootstrap-loaded classes (java.*, javax.*, sun.*, jdk.*, etc.):
-        // CoverageRuntime.hit() uses ByteBuffer internally — instrumenting those
-        // same classes would recurse infinitely.
-        if (loader == null) return null;
+        // Bootstrap-loaded classes (loader == null) and platform-module classes
+        // (JDK 9+ platform class loader, e.g. jdk.localedata) are above the
+        // system class loader in the hierarchy and cannot see CoverageRuntime —
+        // the -javaagent jar is only on the system/app class loader's path.
+        // Instrumenting them would cause NoClassDefFoundError at runtime.
+        if (!canSeeRuntime(loader)) return null;
         // Never instrument the harness runtime or its ASM dependency.
         if (className.startsWith("io/killedkenny/crossfuzz/")) return null;
         if (className.startsWith("org/objectweb/asm/")) return null;
         try {
             ClassReader cr = new ClassReader(buf);
             ClassNode cn = new ClassNode();
-            // EXPAND_FRAMES: parse and expand all StackMapTable entries into
-            // FrameNodes in the instruction list. Combined with COMPUTE_MAXS
-            // below this avoids loading any classes during instrumentation
-            // (COMPUTE_FRAMES triggers getCommonSuperClass → Class.forName →
-            // re-entrant loadClass while the class is mid-definition → LinkageError).
-            cr.accept(cn, ClassReader.EXPAND_FRAMES);
+            // SKIP_FRAMES: discard existing frames; COMPUTE_FRAMES rewrites them
+            // from scratch so probe insertions never invalidate Uninitialized
+            // type offsets or any other frame-tracked state.
+            cr.accept(cn, ClassReader.SKIP_FRAMES);
             for (MethodNode mn : cn.methods) {
                 instrumentMethod(className, mn);
             }
-            // COMPUTE_MAXS: only recalculate max stack/locals. Our probes have
-            // zero net stack effect (LDC int + INVOKESTATIC void), so existing
-            // StackMapTable frames remain valid — no class loading required.
-            ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_MAXS);
+            // COMPUTE_FRAMES recomputes all stack map frames from scratch.
+            // getCommonSuperClass uses getResourceAsStream rather than
+            // Class.forName so it never calls defineClass — avoiding the
+            // re-entrant loadClass → duplicate-definition LinkageError that
+            // occurs when Class.forName is called for the class currently
+            // being transformed.
+            ClassWriter cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES) {
+                @Override
+                protected String getCommonSuperClass(String type1, String type2) {
+                    return commonSuperClass(type1, type2, loader);
+                }
+            };
             cn.accept(cw);
             return cw.toByteArray();
         } catch (Throwable t) {
+            System.err.println("[crossfuzz] instrument failed: " + className + ": " + t);
+            return null;
+        }
+    }
+
+    // Returns true if loader is the system class loader or a descendant of it.
+    // The -javaagent jar sits on the system class loader's classpath; any loader
+    // that delegates to it (directly or transitively) can find CoverageRuntime.
+    // The platform class loader and bootstrap class loader sit ABOVE the system
+    // loader and do not delegate down, so they cannot find it.
+    private static boolean canSeeRuntime(ClassLoader loader) {
+        if (SYS_LOADER == null) return loader != null; // unusual env: skip bootstrap only
+        for (ClassLoader cl = loader; cl != null; cl = cl.getParent()) {
+            if (cl == SYS_LOADER) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Resolves the common superclass of two internal type names by reading
+     * class bytes via getResourceAsStream rather than Class.forName.
+     *
+     * <p>Class.forName triggers ClassLoader.defineClass. When called inside
+     * transform() for the class currently being defined, the same-thread
+     * re-entrant loadClass call finds the class not yet defined, loads it
+     * again, defines it, and then the outer transform's defineClass call
+     * throws LinkageError: duplicate class definition.
+     *
+     * <p>getResourceAsStream reads bytes from the classpath without side
+     * effects on the class loader state, so it is safe to call at any point
+     * during transformation. Class.forName is used as a last resort only for
+     * types that have no class file on the path (array types, dynamic proxies,
+     * bootstrap module classes): those are always already loaded by the time
+     * the agent runs, so defineClass is never triggered.
+     */
+    private static String commonSuperClass(String type1, String type2,
+            ClassLoader loader) {
+        if ("java/lang/Object".equals(type1) || "java/lang/Object".equals(type2)) {
+            return "java/lang/Object";
+        }
+        List<String> chain1 = buildChain(type1, loader);
+        if (chain1.contains(type2)) return type2;
+        List<String> chain2 = buildChain(type2, loader);
+        if (chain2.contains(type1)) return type1;
+        Set<String> set1 = new HashSet<>(chain1);
+        for (String ancestor : chain2) {
+            if (set1.contains(ancestor)) return ancestor;
+        }
+        return "java/lang/Object";
+    }
+
+    private static List<String> buildChain(String type, ClassLoader loader) {
+        List<String> chain = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        String cur = type;
+        while (cur != null && !cur.equals("java/lang/Object") && seen.add(cur)) {
+            chain.add(cur);
+            cur = superOf(cur, loader);
+        }
+        chain.add("java/lang/Object");
+        return chain;
+    }
+
+    private static String superOf(String internalName, ClassLoader loader) {
+        // Try both the target loader and the system loader (for bootstrap types
+        // that surface as resources in the JDK's jimage/modules on JDK 9+).
+        ClassLoader sys = ClassLoader.getSystemClassLoader();
+        for (ClassLoader cl : new ClassLoader[]{loader, sys}) {
+            if (cl == null) continue;
+            try (InputStream is = cl.getResourceAsStream(internalName + ".class")) {
+                if (is != null) {
+                    return new ClassReader(is).getSuperName();
+                }
+            } catch (IOException ignored) {}
+        }
+        // Class not findable as a resource: array type, dynamic proxy, or a
+        // bootstrap class whose module doesn't export resources. These are
+        // always already loaded, so Class.forName won't call defineClass.
+        try {
+            ClassLoader cl = loader != null ? loader : sys;
+            Class<?> c = Class.forName(internalName.replace('/', '.'), false, cl);
+            Class<?> sup = c.getSuperclass();
+            return sup != null ? sup.getName().replace('.', '/') : null;
+        } catch (Exception ignored) {
             return null;
         }
     }
@@ -89,24 +188,24 @@ public class CoverageTransformer implements ClassFileTransformer {
         // Inject at method entry (before first instruction)
         mn.instructions.insert(makeHit(cls, mn.name, 0));
 
-        // Inject after each branch-target label (and any pseudo-nodes that follow it).
-        // With EXPAND_FRAMES, a label may be followed by a LineNumberNode, a FrameNode,
-        // or both in either order, before the first real instruction. The StackMapTable
-        // entry must remain at the label's effective bytecode offset, so the probe must
-        // come after all of these pseudo-nodes. (Exception handler labels compiled with
-        // debug info have LineNumberNode → FrameNode between the label and the handler
-        // body; checking only for FrameNode misses the LineNumberNode and shifts the
-        // frame past the probe, producing VerifyError: Expecting a stackmap frame at
-        // branch target N.)
+        // Inject after each branch-target label.
+        // insert(n, probe) puts the probe BEFORE the LabelNode, but the label's
+        // bytecode offset equals the first real instruction AFTER it — so a taken
+        // branch skips the probe entirely. Instead we insert the probe before the
+        // node that currently follows the label in the live list. That node becomes
+        // the second item after the label; the probe becomes the first, so the
+        // label's bytecode offset now points to the probe. Taken branches land on
+        // the probe; fall-through paths also run it.
         int blockId = 1;
         for (AbstractInsnNode n : mn.instructions.toArray()) {
             if (n instanceof LabelNode && targets.contains(n)) {
-                AbstractInsnNode insertAfter = n;
-                while (insertAfter.getNext() instanceof FrameNode
-                        || insertAfter.getNext() instanceof LineNumberNode) {
-                    insertAfter = insertAfter.getNext();
+                InsnList probe = makeHit(cls, mn.name, blockId++);
+                AbstractInsnNode after = n.getNext();
+                if (after != null) {
+                    mn.instructions.insert(after, probe);
+                } else {
+                    mn.instructions.add(probe);
                 }
-                mn.instructions.insert(insertAfter, makeHit(cls, mn.name, blockId++));
             }
         }
     }

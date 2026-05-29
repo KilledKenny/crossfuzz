@@ -9,6 +9,7 @@ import java.nio.channels.FileChannel;
 
 public class CoverageAgent {
     public static void premain(String agentArgs, Instrumentation inst) {
+        System.err.println("[crossfuzz] agent: premain loaded");
         // Initialize the coverage bitmap before any application class is loaded.
         // CROSSFUZZ_SHM is already set by the coordinator before spawning the JVM.
         String shmPath = System.getenv("CROSSFUZZ_SHM");
@@ -26,6 +27,8 @@ public class CoverageAgent {
             } catch (Exception e) {
                 System.err.println("[crossfuzz] agent: failed to map SHM: " + e);
             }
+        } else {
+            System.err.println("[crossfuzz] agent: CROSSFUZZ_SHM not set — no coverage bitmap");
         }
         inst.addTransformer(new CoverageTransformer(), true);
     }
