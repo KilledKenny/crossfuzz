@@ -17,8 +17,5 @@
   "devDependencies": {
     "@types/istanbul-lib-instrument": "^1.7.8",
     "bun-types": "latest"
-  },
-  "peerDependencies": {
-    "bun": ">=1.0.0"
   }
 }
