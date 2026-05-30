@@ -43,7 +43,8 @@ binary = "python3"
 args = ["my_target.py"]
 ```
 
-Then run the campaign with `crossfuzz run crossfuzz.toml`.
+Then run the campaign with `crossfuzz run` (the config path defaults to
+`crossfuzz.toml`).
 
 ## API
 

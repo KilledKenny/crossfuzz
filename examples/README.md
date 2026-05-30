@@ -13,6 +13,6 @@ To run any example:
 
 ```bash
 cd examples/<name>
-crossfuzz build crossfuzz.toml
-crossfuzz run   crossfuzz.toml
+crossfuzz build
+crossfuzz run
 ```

@@ -45,7 +45,7 @@ make                   # coordinator + all bundled harnesses (Java jar, JS, Pyth
 ### Shell completion
 
 crossfuzz ships completion for bash, zsh, fish and powershell, including
-completion of the `<config.toml>` argument and `--name` target names. For bash:
+completion of the `[config.toml]` argument and `--name` target names. For bash:
 
 ```bash
 # try it in the current shell
@@ -81,9 +81,16 @@ npx agent-skills-cli add KilledKenny/crossfuzz
 crossfuzz is driven by a TOML config that lists the targets to fuzz and how to compare their outputs. The three commands you will use most:
 
 ```bash
-crossfuzz build path/to/crossfuzz.toml      # run each target's build_cmd
-crossfuzz run   path/to/crossfuzz.toml      # start the fuzzing campaign
-crossfuzz analyze path/to/crossfuzz.toml --payload "hello"   # one-shot: send a payload, print each target's output
+crossfuzz build                       # run each target's build_cmd
+crossfuzz run                         # start the fuzzing campaign
+crossfuzz analyze --payload "hello"   # one-shot: send a payload, print each target's output
+```
+
+The config path is optional and defaults to `crossfuzz.toml` in the current
+directory. Pass a different path to override it.
+
+```bash
+crossfuzz run path/to/crossfuzz.toml --build
 ```
 
 Useful flags on `run`:
@@ -143,8 +150,8 @@ Run it:
 
 ```bash
 cd examples/base64
-crossfuzz build crossfuzz.toml
-crossfuzz run   crossfuzz.toml
+crossfuzz build
+crossfuzz run
 ```
 
 Interesting inputs are written to `corpus/`; any input that produces disagreeing outputs is saved to `findings/`.

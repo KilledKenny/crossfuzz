@@ -3,10 +3,12 @@
 ## Usage
 
 ```
-crossfuzz <command> <config.toml> [flags]
+crossfuzz <command> [flags] [crossfuzz.toml]
 ```
 
-All commands take the config file as the second argument. Flags follow after.
+The config file is an optional positional argument that defaults to
+`crossfuzz.toml` in the current directory; pass a different path (in any
+position relative to the flags) to override it.
 
 ---
 
@@ -15,7 +17,7 @@ All commands take the config file as the second argument. Flags follow after.
 Runs each target's `build_cmd`, then the filter's and comparator's `build_cmd` if present.
 
 ```bash
-crossfuzz build crossfuzz.toml [--name=t1,t2]
+crossfuzz build [--name=t1,t2] [crossfuzz.toml]
 ```
 
 | Flag | Description |
@@ -31,7 +33,7 @@ Exits non-zero if any build fails.
 Starts the fuzzing campaign. Targets are started as persistent processes and kept alive for the duration.
 
 ```bash
-crossfuzz run crossfuzz.toml [flags]
+crossfuzz run [flags] [crossfuzz.toml]
 ```
 
 | Flag | Default | Description |
@@ -65,7 +67,7 @@ crossfuzz run crossfuzz.toml [flags]
 Deduplicates the corpus by running all entries and keeping only those that cover at least one edge not covered by entries already kept. Useful after a long campaign to shrink a large corpus.
 
 ```bash
-crossfuzz reduce crossfuzz.toml [flags]
+crossfuzz reduce [flags] [config.toml]
 ```
 
 | Flag | Default | Description |
@@ -87,9 +89,9 @@ Reduced 1043 → 87 entries (saved to "corpus-reduced")
 Runs one or more raw payloads against all targets and prints per-target output as a hex dump with diff highlighting (differing bytes are colored).
 
 ```bash
-crossfuzz analyze crossfuzz.toml --payload="hello"
-crossfuzz analyze crossfuzz.toml --payload-path=./findings/
-crossfuzz analyze crossfuzz.toml --payload-path=./findings/abc123 --build
+crossfuzz analyze --payload="hello"
+crossfuzz analyze --payload-path=./findings/
+crossfuzz analyze --payload-path=./findings/abc123 --build
 ```
 
 | Flag | Description |

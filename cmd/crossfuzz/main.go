@@ -26,6 +26,19 @@ import (
 // A plain `go build` leaves it as "dev".
 var version = "dev"
 
+// defaultConfigPath is used when a config-taking subcommand is invoked with no
+// positional [config.toml] argument.
+const defaultConfigPath = "crossfuzz.toml"
+
+// resolveConfigPath returns the config path to load: the positional argument if
+// one was given, otherwise the default crossfuzz.toml in the working directory.
+func resolveConfigPath(args []string) string {
+	if len(args) > 0 {
+		return args[0]
+	}
+	return defaultConfigPath
+}
+
 // Persistent (root-level) flag values shared across all subcommands.
 var (
 	flagName      string
@@ -65,14 +78,11 @@ func tomlArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]
 }
 
 // nameFlagCompletion completes the --name flag with target names read from the
-// config file already present as the positional argument. It honours an
-// already-typed comma-separated prefix so multi-target lists complete segment
-// by segment.
+// config file — the positional argument if one is present, otherwise the
+// default crossfuzz.toml. It honours an already-typed comma-separated prefix so
+// multi-target lists complete segment by segment.
 func nameFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
-	if len(args) == 0 {
-		return nil, cobra.ShellCompDirectiveNoFileComp
-	}
-	cfg, err := config.Load(args[0])
+	cfg, err := config.Load(resolveConfigPath(args))
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
@@ -109,11 +119,16 @@ func main() {
 	}
 }
 
-// loadConfig loads the TOML config from args[0], applies the --name filter and
-// --timeout override, and returns the config plus the parsed memory limit.
+// loadConfig loads the TOML config from the positional argument (or the default
+// crossfuzz.toml when none is given), applies the --name filter and --timeout
+// override, and returns the config plus the parsed memory limit.
 func loadConfig(cmd *cobra.Command, args []string) (*config.Config, uint64, error) {
-	cfg, err := config.Load(args[0])
+	path := resolveConfigPath(args)
+	cfg, err := config.Load(path)
 	if err != nil {
+		if len(args) == 0 {
+			return nil, 0, fmt.Errorf("no config path given and default %q could not be loaded: %w", defaultConfigPath, err)
+		}
 		return nil, 0, fmt.Errorf("error loading config: %w", err)
 	}
 
@@ -144,9 +159,9 @@ func loadConfig(cmd *cobra.Command, args []string) (*config.Config, uint64, erro
 
 func buildCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:               "build <config.toml>",
+		Use:               "build [config.toml]",
 		Short:             "Build all targets",
-		Args:              cobra.ExactArgs(1),
+		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: tomlArgCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, _, err := loadConfig(cmd, args)
@@ -175,9 +190,9 @@ func runCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:               "run <config.toml>",
+		Use:               "run [config.toml]",
 		Short:             "Run differential fuzzing campaign",
-		Args:              cobra.ExactArgs(1),
+		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: tomlArgCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, memLimit, err := loadConfig(cmd, args)
@@ -229,9 +244,9 @@ func reduceCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:               "reduce <config.toml>",
+		Use:               "reduce [config.toml]",
 		Short:             "Deduplicate corpus by coverage profile",
-		Args:              cobra.ExactArgs(1),
+		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: tomlArgCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, _, err := loadConfig(cmd, args)
@@ -268,9 +283,9 @@ func analyzeCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:               "analyze <config.toml>",
+		Use:               "analyze [config.toml]",
 		Short:             "Run a payload against all targets and print hex output",
-		Args:              cobra.ExactArgs(1),
+		Args:              cobra.MaximumNArgs(1),
 		ValidArgsFunction: tomlArgCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, _, err := loadConfig(cmd, args)

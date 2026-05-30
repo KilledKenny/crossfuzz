@@ -13,17 +13,17 @@ crossfuzz is a coverage-guided differential fuzzer. It feeds the same input to m
 # 1. Build coordinator (once)
 make bin/crossfuzz
 
-# 2. Build targets defined in your config
-./bin/crossfuzz build crossfuzz.toml
+# 2. Build targets defined in your config (path defaults to ./crossfuzz.toml)
+./bin/crossfuzz build [crossfuzz.toml]
 
 # 3. Run a campaign (--build rebuilds first)
-./bin/crossfuzz run crossfuzz.toml --build
+./bin/crossfuzz run [crossfuzz.toml] --build
 
 # 4. Inspect a finding
-./bin/crossfuzz analyze crossfuzz.toml --payload-path findings/
+./bin/crossfuzz analyze [crossfuzz.toml] --payload-path findings/
 
 # 5. (Optional) Deduplicate corpus
-./bin/crossfuzz reduce crossfuzz.toml
+./bin/crossfuzz reduce [crossfuzz.toml]
 ```
 
 ## Commands at a glance
@@ -104,7 +104,7 @@ To have the filter rewrite accepted inputs (not just accept/reject them), `trans
 Each finding is saved as a raw binary file in `findings_dir/`. Run `analyze` to see per-target output side-by-side with diff highlighting:
 
 ```bash
-./bin/crossfuzz analyze crossfuzz.toml --payload-path ./findings/
+./bin/crossfuzz analyze --payload-path ./findings/
 ```
 
 ## Flags vs. config
