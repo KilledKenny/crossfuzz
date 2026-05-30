@@ -19,10 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
+          cache-dependency-path: go.sum
 
       - name: Build binaries
         run: |
@@ -41,7 +42,7 @@ jobs:
           done
 
       - name: Create release and upload binaries
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/crossfuzz-*   # matches each binary and its .sha256 sidecar
           generate_release_notes: true

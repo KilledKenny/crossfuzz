@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"syscall"
 	"time"
-	"unsafe"
 
 	"github.com/KilledKenny/crossfuzz/pkg/coverage"
 	"github.com/KilledKenny/crossfuzz/pkg/protocol"
@@ -105,16 +104,9 @@ func (p *Process) Start() error {
 		return fmt.Errorf("start process %s (%s): %w", p.cfg.Name, p.cfg.Binary, err)
 	}
 
-	// Apply per-target virtual-memory limit via prlimit64.
-	// This races with early allocations in the target's init code, but is
-	// sufficient to catch runaway allocators once the target is running.
+	// Apply per-target virtual-memory limit via prlimit64 (Linux only).
 	if p.cfg.MemLimitBytes > 0 {
-		lim := syscall.Rlimit{Cur: p.cfg.MemLimitBytes, Max: p.cfg.MemLimitBytes}
-		syscall.Syscall6(syscall.SYS_PRLIMIT64,
-			uintptr(p.cmd.Process.Pid),
-			uintptr(syscall.RLIMIT_AS),
-			uintptr(unsafe.Pointer(&lim)),
-			0, 0, 0)
+		applyMemLimit(p.cmd.Process.Pid, p.cfg.MemLimitBytes)
 	}
 
 	// Close the child-side ends in the parent.
