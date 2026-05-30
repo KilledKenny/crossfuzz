@@ -9,8 +9,8 @@ version = project.findProperty('projectVersion') ?: '0.0.3'
 
 def isSnapshot = version.endsWith('-SNAPSHOT')
 
-def mavenCentralUsername = findProperty('mavenCentralUsername') ?: System.getenv('MAVEN_CENTRAL_USERNAME') ?: ''
-def mavenCentralPassword = findProperty('mavenCentralPassword') ?: System.getenv('MAVEN_CENTRAL_PASSWORD') ?: ''
+def mavenCentralUsername = gradle.ext.mavenCentralUsername
+def mavenCentralPassword = gradle.ext.mavenCentralPassword
 
 // Pin the bytecode version. Without this, `gradle jar` emits class files for
 // whatever JDK built it (e.g. JDK 25 -> class version 69), which an older

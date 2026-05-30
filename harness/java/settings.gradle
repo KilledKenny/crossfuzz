@@ -2,10 +2,13 @@ plugins {
      id 'com.gradleup.nmcp.settings' version '1.4.4'
 }
 rootProject.name = 'crossfuzz'
+gradle.ext.mavenCentralUsername = findProperty('mavenCentralUsername') ?: System.getenv('MAVEN_CENTRAL_USERNAME') ?: ''
+gradle.ext.mavenCentralPassword = findProperty('mavenCentralPassword') ?: System.getenv('MAVEN_CENTRAL_PASSWORD') ?: ''
+
 nmcpSettings {
     centralPortal {
-        username = mavenCentralUsername
-        password = mavenCentralPassword
-        publishingType = 'USER_MANAGED' // 'AUTOMATIC' // or 'USER_MANAGED' (usefull for testing)
+        username = gradle.ext.mavenCentralUsername
+        password = gradle.ext.mavenCentralPassword
+        publishingType = 'USER_MANAGED' // or 'AUTOMATIC'
     }
 }
