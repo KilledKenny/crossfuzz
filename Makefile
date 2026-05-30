@@ -10,10 +10,7 @@ bin/crossfuzz: bin/ $(GO_CLI_INPUTS)
 	go build  -o $@ ./cmd/crossfuzz
 
 
-JAVA_HARNES_INPUT=$(find harness/java/ -type f \( -name "*.java" -o -name "*.gradle" \))
-
-#temp CI debug
-$(info $$JAVA_HARNES_INPUT is [${JAVA_HARNES_INPUT}])
+JAVA_HARNES_INPUT=$(shell find harness/java/ -type f -name "*.java" -o -type f -name "*.gradle")
 
 HARNESS_TARGET+= harness/java/build/libs/crossfuzz.jar
 harness/java/build/libs/crossfuzz.jar: $(JAVA_HARNES_INPUT)
