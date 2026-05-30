@@ -24,11 +24,6 @@ $(PYTHON_HARNESS_VENV):
 	python3 -m venv $(PYTHON_HARNESS_VENV)
 	$(PYTHON_HARNESS_VENV)/bin/pip install --quiet -r harness/python/requirements.txt
 	touch $@
-# Always-run variant used by test-e2e-docker: the host venv is a broken
-# symlink inside the container (host Nix store path absent), so we must
-# force-recreate it with the container's Python before make can use it.
-.PHONY: python-venv
-python-venv: $(PYTHON_HARNESS_VENV)
 
 HARNESS_TARGET+= harness/rust/target/release/libcrossfuzz_harness.rlib
 harness/rust/target/release/libcrossfuzz_harness.rlib: harness/rust/Cargo.toml $(wildcard harness/rust/src/*.rs)
@@ -82,7 +77,7 @@ test-e2e-docker:
 	  -v "$(CURDIR)":/w \
 	  -w /w \
 	  $(CI_IMAGE) \
-	  bash -c "set -euo pipefail; make python-venv; make test; make test-e2e"
+	  bash -c "set -euo pipefail; make harness; make test; make test-e2e"
 
 .DEFAULT_GOAL := all
 .PHONY: all

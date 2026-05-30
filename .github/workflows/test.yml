@@ -47,11 +47,9 @@ jobs:
       # via `docker run` which mounts the workspace into the container.
       #
       # Steps inside the container:
-      #   1. Create the Python venv (no Makefile rule for this; done manually
-      #      in local dev per project convention).
-      #   2. Install Python harness deps into the venv.
-      #   3. make test  — Go unit tests with -race.
-      #   4. make test-e2e — builds all harnesses then runs the e2e suite.
+      #   1. Install Python harness deps into the venv.
+      #   2. make test  — Go unit tests with -race.
+      #   3. make test-e2e — builds all harnesses then runs the e2e suite.
       - name: Run tests
         run: |
           IMAGE="ghcr.io/${{ github.repository_owner }}/crossfuzz-ci"
@@ -59,4 +57,4 @@ jobs:
             -v "$PWD":/w \
             -w /w \
             "${IMAGE,,}:latest" \
-            bash -c "set -euo pipefail; make python-venv; make test; make test-e2e"
+            bash -c "set -euo pipefail; make harness; make test; make test-e2e"
