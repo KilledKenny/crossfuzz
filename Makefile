@@ -12,6 +12,9 @@ bin/crossfuzz: bin/ $(GO_CLI_INPUTS)
 
 JAVA_HARNES_INPUT=$(find harness/java/ -type f \( -name "*.java" -o -name "*.gradle" \))
 
+#temp CI debug
+$(info $$JAVA_HARNES_INPUT is [${JAVA_HARNES_INPUT}])
+
 HARNESS_TARGET+= harness/java/build/libs/crossfuzz.jar
 harness/java/build/libs/crossfuzz.jar: $(JAVA_HARNES_INPUT)
 	cd ./harness/java && ./gradlew jar
