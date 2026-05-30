@@ -12,8 +12,13 @@ bin/crossfuzz: bin/ $(GO_CLI_INPUTS)
 
 JAVA_HARNES_INPUT=$(shell find harness/java/ -type f -name "*.java" -o -type f -name "*.gradle")
 
+GRADLE_VERSION := $(shell grep distributionUrl harness/java/gradle/wrapper/gradle-wrapper.properties | sed 's/.*gradle-\([0-9.]*\)-.*/\1/')
+
+harness/java/gradle/wrapper/gradle-wrapper.jar:
+	curl -fsSL -o $@ https://raw.githubusercontent.com/gradle/gradle/v$(GRADLE_VERSION)/gradle/wrapper/gradle-wrapper.jar
+
 HARNESS_TARGET+= harness/java/build/libs/crossfuzz.jar
-harness/java/build/libs/crossfuzz.jar: $(JAVA_HARNES_INPUT)
+harness/java/build/libs/crossfuzz.jar: harness/java/gradle/wrapper/gradle-wrapper.jar $(JAVA_HARNES_INPUT)
 	cd ./harness/java && ./gradlew jar
 
 
