@@ -55,6 +55,9 @@ in [
   # binaries so they run correctly outside the Nix environment
   pkgs.patchelf
 
+  # curl (used by Makefile to download gradle-wrapper.jar)
+  pkgs.curl
+
   # TLS certificates (Go module downloads, Gradle, cargo, git, curl, …)
   pkgs.cacert
 ]
