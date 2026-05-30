@@ -10,18 +10,25 @@ bin/crossfuzz: bin/ $(GO_CLI_INPUTS)
 	go build  -o $@ ./cmd/crossfuzz
 
 
-JAVA_HARNES_INPUT=$(find harness/java/src/ -name "*.java")
-JAVA_HARNES_INPUT+= $(wildcard harness/java/*.gradle)
+JAVA_HARNES_INPUT=$(find harness/java/ -type f \( -name "*.java" -o -name "*.gradle" \))
 
 HARNESS_TARGET+= harness/java/build/libs/crossfuzz.jar
 harness/java/build/libs/crossfuzz.jar: $(JAVA_HARNES_INPUT)
 	cd ./harness/java && ./gradlew jar
 
 
-HARNESS_TARGET+= harness/python/.deps_installed
-harness/python/.deps_installed: harness/python/.venv/bin/python3 harness/python/requirements.txt
-	harness/python/.venv/bin/pip install --quiet -r harness/python/requirements.txt
+PYTHON_HARNESS_VENV := harness/python/.venv
+
+HARNESS_TARGET+=$(PYTHON_HARNESS_VENV)
+$(PYTHON_HARNESS_VENV):
+	python3 -m venv $(PYTHON_HARNESS_VENV)
+	$(PYTHON_HARNESS_VENV)/bin/pip install --quiet -r harness/python/requirements.txt
 	touch $@
+# Always-run variant used by test-e2e-docker: the host venv is a broken
+# symlink inside the container (host Nix store path absent), so we must
+# force-recreate it with the container's Python before make can use it.
+.PHONY: python-venv
+python-venv: $(PYTHON_HARNESS_VENV)
 
 HARNESS_TARGET+= harness/rust/target/release/libcrossfuzz_harness.rlib
 harness/rust/target/release/libcrossfuzz_harness.rlib: harness/rust/Cargo.toml $(wildcard harness/rust/src/*.rs)
@@ -61,6 +68,21 @@ install-c-harnes:
 uninstall-c-harnes:
 	cmake --build $(HARNESS_BUILD_DIR) --target uninstall 2>/dev/null || \
 	  xargs rm -f < $(HARNESS_BUILD_DIR)/install_manifest.txt
+
+CI_IMAGE ?= crossfuzz-ci:latest
+
+.PHONY: ci-image
+ci-image: bin/ nix/docker.nix nix/packages.nix nix/nixpkgs.nix
+	nix-build nix/docker.nix -o bin/ci-image
+	docker load --input bin/ci-image
+
+.PHONY: test-e2e-docker
+test-e2e-docker:
+	docker run --rm \
+	  -v "$(CURDIR)":/w \
+	  -w /w \
+	  $(CI_IMAGE) \
+	  bash -c "set -euo pipefail; make python-venv; make test; make test-e2e"
 
 .DEFAULT_GOAL := all
 .PHONY: all

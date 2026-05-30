@@ -97,7 +97,7 @@ binary = "./url_filter"
 build_cmd = "cd filter && go build -o ../url_filter ."
 ```
 
-With `transform = true` in the filter's Settings, the returned bytes replace the original input for targets.
+To have the filter rewrite accepted inputs (not just accept/reject them), `transform` must be enabled in **two** places: set `transform = true` in this `[input_filter]` block (so the coordinator reads the rewritten bytes back) **and** pass `Settings{Transform: true}` in the filter harness (so the filter writes them). Set only one and transform silently does nothing — the original input is forwarded unchanged.
 
 ## Findings
 
@@ -116,20 +116,15 @@ When a CLI flag mirrors a config field, an **explicitly passed flag takes preced
 ```
 --build               Build before running
 --workers=N           Parallel workers, each with their own target processes (default 1).
-                      Recommended: do not exceed `nproc` — each worker spawns a full copy of
-                      every target, so memory scales linearly and oversubscribing CPUs hurts
-                      throughput.
+                      Don't exceed `nproc`: each worker spawns a full copy of every target,
+                      so memory scales linearly and oversubscribing CPUs hurts throughput.
+--stop-after=VALUE    Stop after N executions per worker (integer; total = N×workers) or
+                      after a duration, e.g. 30s, 2m
 --max-findings=N      Stop after N findings (default 10)
---stop-after=VALUE    Stop after N executions per worker (integer; total = N×workers) or after
-                      a duration, e.g. 30s, 2m
 --timeout=DURATION    Per-execution timeout override, e.g. 500ms, 5s; if unset uses config
                       exec_timeout (default 1s)
---max-memory=SIZE     Virtual memory limit per target, e.g. 512M, 1G
---validate=N          Re-run each new input N times to confirm output stability
---warmup=N            Run corpus N times before main loop
---seed=N              Deterministic mutator seed (0 = wall-clock); for tests and bug reproduction
---log-file=PATH       Also tee all stdout output to this file
---name=t1,t2          Only run/build these named targets
---corpus=DIR          Override corpus directory (default: corpus)
---findings=DIR        Override findings directory (default: findings)
 ```
+
+These are the flags you reach for most. For the full set — `--validate`, `--warmup`,
+`--seed`, `--max-memory`, `--log-file`, `--corpus`, `--findings`, `--debug-edge`, and
+the per-command flags for `reduce`/`analyze` — read `<skill-dir>/references/commands.md`.

@@ -1,0 +1,48 @@
+# Builds the crossfuzz CLI for macOS + Linux (amd64 + arm64) and publishes
+# a GitHub Release with the binaries and per-file SHA256 checksums attached.
+#
+# Trigger:
+#   - push of tag matching cli-v*  → real release
+
+name: Release crossfuzz CLI
+
+on:
+  push:
+    tags:
+      - 'cli-v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # required to create the release and upload assets
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build binaries
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/cli-v}"
+          mkdir -p dist
+          for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            GOOS="${platform%/*}"; GOARCH="${platform#*/}"
+            name="crossfuzz-${GOOS}-${GOARCH}"
+            echo "Building dist/$name"
+            CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" \
+              go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" \
+              -o "dist/$name" ./cmd/crossfuzz
+            # Generate a per-file checksum from inside dist/ so the .sha256 file
+            # references just the bare filename (not a dist/ path prefix).
+            ( cd dist && sha256sum "$name" > "$name.sha256" )
+          done
+
+      - name: Create release and upload binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/crossfuzz-*   # matches each binary and its .sha256 sidecar
+          generate_release_notes: true
+          fail_on_unmatched_files: true

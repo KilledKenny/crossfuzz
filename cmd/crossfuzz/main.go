@@ -22,6 +22,10 @@ import (
 	"github.com/KilledKenny/crossfuzz/pkg/runner"
 )
 
+// version is set at build time via -ldflags "-X main.version=<tag>".
+// A plain `go build` leaves it as "dev".
+var version = "dev"
+
 // Persistent (root-level) flag values shared across all subcommands.
 var (
 	flagName      string
@@ -30,8 +34,9 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "crossfuzz",
-	Short: "Coverage-guided differential fuzzer",
+	Use:     "crossfuzz",
+	Short:   "Coverage-guided differential fuzzer",
+	Version: version,
 }
 
 func init() {
@@ -43,6 +48,18 @@ func init() {
 	rootCmd.AddCommand(runCmd())
 	rootCmd.AddCommand(reduceCmd())
 	rootCmd.AddCommand(analyzeCmd())
+	rootCmd.AddCommand(versionCmd())
+}
+
+func versionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print the crossfuzz version",
+		Args:  cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Println(version)
+		},
+	}
 }
 
 func main() {

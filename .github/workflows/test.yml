@@ -1,0 +1,62 @@
+# Runs `make test` and `make test-e2e` on every push (all branches) and pull
+# request, using the prebuilt Nix-based Docker image from GHCR.
+#
+# Only the latest commit in a push series runs — a newer push to the same ref
+# cancels any in-flight run via the concurrency group below.
+#
+# Prerequisites:
+#   - The CI image must exist at ghcr.io/<owner>/crossfuzz-ci:latest.
+#     Build it once via workflow_dispatch of ci-image.yml (bootstrap), then
+#     it is updated automatically whenever the toolchain definition changes.
+
+name: Test
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read   # to pull from GHCR
+
+    steps:
+      - uses: actions/checkout@v6
+
+      # Pull the prebuilt image.  We authenticate so private GHCR packages work.
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull CI image
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/crossfuzz-ci"
+          docker pull "${IMAGE,,}:latest"
+
+      # The checkout is done on the host (not inside the container) so that
+      # GitHub's Node-based actions work correctly; then the suite is executed
+      # via `docker run` which mounts the workspace into the container.
+      #
+      # Steps inside the container:
+      #   1. Create the Python venv (no Makefile rule for this; done manually
+      #      in local dev per project convention).
+      #   2. Install Python harness deps into the venv.
+      #   3. make test  — Go unit tests with -race.
+      #   4. make test-e2e — builds all harnesses then runs the e2e suite.
+      - name: Run tests
+        run: |
+          IMAGE="ghcr.io/${{ github.repository_owner }}/crossfuzz-ci"
+          docker run --rm \
+            -v "$PWD":/w \
+            -w /w \
+            "${IMAGE,,}:latest" \
+            bash -c "set -euo pipefail; make python-venv; make test; make test-e2e"
