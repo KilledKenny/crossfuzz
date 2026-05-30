@@ -27,7 +27,11 @@ go install github.com/KilledKenny/crossfuzz/cmd/crossfuzz@latest
 
 ### Prebuilt binaries
 
-*TODO — link to release artifacts once published.*
+```bash
+curl -fsSL https://raw.githubusercontent.com/KilledKenny/crossfuzz/main/install.sh | bash
+```
+
+Or download a binary directly from the [latest GitHub Release](https://github.com/KilledKenny/crossfuzz/releases/latest).
 
 ### Local clone
 
