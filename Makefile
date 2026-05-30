@@ -30,8 +30,8 @@ $(PYTHON_HARNESS_VENV):
 	$(PYTHON_HARNESS_VENV)/bin/pip install --quiet -r harness/python/requirements.txt
 	touch $@
 
-HARNESS_TARGET+= harness/rust/target/release/libcrossfuzz_harness.rlib
-harness/rust/target/release/libcrossfuzz_harness.rlib: harness/rust/Cargo.toml $(wildcard harness/rust/src/*.rs)
+HARNESS_TARGET+= harness/rust/target/release/libcrossfuzz.rlib
+harness/rust/target/release/libcrossfuzz.rlib: harness/rust/Cargo.toml $(wildcard harness/rust/src/*.rs)
 	cd harness/rust && cargo build --release
 
 HARNESS_TARGET+= harness/js/node_modules

@@ -59,7 +59,7 @@ func RequireJavaHarness(t *T) {
 func RequireRustHarness(t *T) {
 	t.Helper()
 	root := repoRoot(t)
-	p := filepath.Join(root, "harness", "rust", "target", "release", "libcrossfuzz_harness.rlib")
+	p := filepath.Join(root, "harness", "rust", "target", "release", "libcrossfuzz.rlib")
 	if _, err := os.Stat(p); err != nil {
 		t.Skipf("rust harness rlib missing at %s — run `make harness`", p)
 	}
