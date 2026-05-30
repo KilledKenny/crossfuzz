@@ -42,6 +42,22 @@ make bin/crossfuzz     # just the coordinator
 make                   # coordinator + all bundled harnesses (Java jar, JS, Python, Rust)
 ```
 
+### Shell completion
+
+crossfuzz ships completion for bash, zsh, fish and powershell, including
+completion of the `<config.toml>` argument and `--name` target names. For bash:
+
+```bash
+# try it in the current shell
+source <(crossfuzz completion bash)
+
+# install permanently (Linux)
+crossfuzz completion bash | sudo tee /etc/bash_completion.d/crossfuzz >/dev/null
+```
+
+Bash completion requires the `bash-completion` package. For other shells run
+`crossfuzz completion zsh|fish|powershell` and see `crossfuzz completion --help`.
+
 ## AI assistant skills
 
 crossfuzz ships skills that teach your AI assistant the CLI and harness APIs for all supported languages.

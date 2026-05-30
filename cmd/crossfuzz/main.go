@@ -44,11 +44,52 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&flagTimeout, "timeout", "", "Per-execution timeout override (e.g. 5s, 500ms); if unset, uses [campaign] exec_timeout (default 1s)")
 	rootCmd.PersistentFlags().StringVar(&flagMaxMemory, "max-memory", "0", "Virtual memory limit per target process (e.g. 512M, 1G); 0 = no limit")
 
+	if err := rootCmd.RegisterFlagCompletionFunc("name", nameFlagCompletion); err != nil {
+		panic(err)
+	}
+
 	rootCmd.AddCommand(buildCmd())
 	rootCmd.AddCommand(runCmd())
 	rootCmd.AddCommand(reduceCmd())
 	rootCmd.AddCommand(analyzeCmd())
 	rootCmd.AddCommand(versionCmd())
+}
+
+// tomlArgCompletion completes the single <config.toml> positional argument,
+// offering files filtered to the .toml extension (with directory descent).
+func tomlArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) != 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return []string{"toml"}, cobra.ShellCompDirectiveFilterFileExt
+}
+
+// nameFlagCompletion completes the --name flag with target names read from the
+// config file already present as the positional argument. It honours an
+// already-typed comma-separated prefix so multi-target lists complete segment
+// by segment.
+func nameFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) == 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	cfg, err := config.Load(args[0])
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	prefix := ""
+	if i := strings.LastIndex(toComplete, ","); i >= 0 {
+		prefix = toComplete[:i+1]
+	}
+	var out []string
+	for _, t := range cfg.Targets {
+		out = append(out, prefix+t.Name)
+	}
+	return out, cobra.ShellCompDirectiveNoSpace | cobra.ShellCompDirectiveNoFileComp
+}
+
+// dirFlagCompletion restricts a flag's value completion to directories only.
+func dirFlagCompletion(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	return nil, cobra.ShellCompDirectiveFilterDirs
 }
 
 func versionCmd() *cobra.Command {
@@ -103,9 +144,10 @@ func loadConfig(cmd *cobra.Command, args []string) (*config.Config, uint64, erro
 
 func buildCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "build <config.toml>",
-		Short: "Build all targets",
-		Args:  cobra.ExactArgs(1),
+		Use:               "build <config.toml>",
+		Short:             "Build all targets",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: tomlArgCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, _, err := loadConfig(cmd, args)
 			if err != nil {
@@ -133,9 +175,10 @@ func runCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "run <config.toml>",
-		Short: "Run differential fuzzing campaign",
-		Args:  cobra.ExactArgs(1),
+		Use:               "run <config.toml>",
+		Short:             "Run differential fuzzing campaign",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: tomlArgCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, memLimit, err := loadConfig(cmd, args)
 			if err != nil {
@@ -171,6 +214,9 @@ func runCmd() *cobra.Command {
 	cmd.Flags().StringVar(&stopAfter, "stop-after", "", "Stop after N executions per worker (integer) or after a duration (e.g. 30s, 2m). Per-worker counter for integer mode — total is N*workers.")
 	cmd.Flags().Int64Var(&seed, "seed", 0, "Deterministic seed for the mutator (0 = wall-clock). Intended for tests and bug reproduction.")
 
+	cmd.RegisterFlagCompletionFunc("corpus", dirFlagCompletion)   //nolint:errcheck
+	cmd.RegisterFlagCompletionFunc("findings", dirFlagCompletion) //nolint:errcheck
+
 	return cmd
 }
 
@@ -183,9 +229,10 @@ func reduceCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "reduce <config.toml>",
-		Short: "Deduplicate corpus by coverage profile",
-		Args:  cobra.ExactArgs(1),
+		Use:               "reduce <config.toml>",
+		Short:             "Deduplicate corpus by coverage profile",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: tomlArgCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, _, err := loadConfig(cmd, args)
 			if err != nil {
@@ -207,6 +254,9 @@ func reduceCmd() *cobra.Command {
 	cmd.Flags().StringVar(&corpusReduced, "corpus-reduced", "corpus-reduced", "Output directory for reduced corpus")
 	cmd.Flags().IntVar(&validate, "validate", 0, "Re-execute each new input N times to confirm stable output; log unstable inputs with differing targets")
 
+	cmd.RegisterFlagCompletionFunc("corpus", dirFlagCompletion)         //nolint:errcheck
+	cmd.RegisterFlagCompletionFunc("corpus-reduced", dirFlagCompletion) //nolint:errcheck
+
 	return cmd
 }
 
@@ -218,9 +268,10 @@ func analyzeCmd() *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "analyze <config.toml>",
-		Short: "Run a payload against all targets and print hex output",
-		Args:  cobra.ExactArgs(1),
+		Use:               "analyze <config.toml>",
+		Short:             "Run a payload against all targets and print hex output",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: tomlArgCompletion,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, _, err := loadConfig(cmd, args)
 			if err != nil {

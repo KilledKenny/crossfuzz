@@ -37,6 +37,27 @@ chmod +x "${INSTALL_DIR}/crossfuzz"
 
 echo "Done. crossfuzz v${TAG} installed to ${INSTALL_DIR}/crossfuzz"
 
+# Install shell completion by appending a source line to the user's shell rc
+# file. Only touches files that already exist, and skips files that already
+# contain the source line (idempotent re-runs).
+install_completion() {
+  rc_file="$1"
+  shell="$2"
+  [ -f "$rc_file" ] || return 0
+  if grep -qF "source.*crossfuzz completion" "$rc_file"; then
+    return 0
+  fi
+  {
+    echo ""
+    echo "# crossfuzz shell completion"
+    echo "command -v crossfuzz >/dev/null 2>&1 && source <(crossfuzz completion ${shell})"
+  } >> "$rc_file"
+  echo "Added crossfuzz completion to ${rc_file} (restart your shell or 'source ${rc_file}')."
+}
+
+install_completion "${HOME}/.bashrc" bash
+install_completion "${HOME}/.zshrc" zsh
+
 # Add install dir to PATH in ~/.bashrc if not already present
 case ":${PATH}:" in
   *":${INSTALL_DIR}:"*) ;;
